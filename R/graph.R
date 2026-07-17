@@ -94,7 +94,7 @@
 #' @description Draws a random undirected graph on \code{p} nodes from one of the available
 #' structure generators, rejecting degenerate draws (the empty graph and the
 #' complete graph) and resampling until a usable structure is obtained. The
-#' returned adjacency matrix is what \code{\link{simulate_prior_study()}} uses for simulating
+#' returned adjacency matrix is what \code{\link{simulate_prior_study}} uses for simulating
 #' prior study parameters.
 #' @param p Number of nodes (variables) in the graph. Must be at least 3. 
 #' @param structure Which graph generator to use: \code{"smallworld"}, \code{"random"},

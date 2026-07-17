@@ -31,7 +31,7 @@ Simulates prior studies from the Gaussian likelihood: for each
 Studies are independent. If the study was specified with a fixed \code{G},
 every study uses it and only the estimated precision matrix varies; if it was
 specified with a \code{structure}, a new graph is drawn for each study. Call
-\code{\link{set.seed}} first for reproducible output.
+\code{\link[base]{set.seed}} first for reproducible output.
 }
 \seealso{
 Other prior elicitation: 
