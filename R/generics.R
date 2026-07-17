@@ -142,7 +142,7 @@ new_bgm_prior_ess <- function(family, estimates, info = NULL, prior, nu, p,
   return(vals)
 }
 
-#' Print method for prior_ess objects
+# Print method for prior_ess objects
 #' @export
 print.bgm_prior_ess <- function(x, ...) {
   cat("<prior_ess>  family:", x$family, " prior:", x$prior, "\n")
@@ -153,7 +153,7 @@ print.bgm_prior_ess <- function(x, ...) {
   return(invisible(x))
 }
 
-#' Summary method for prior_ess objects
+# Summary method for prior_ess objects
 #' @export
 summary.bgm_prior_ess <- function(object, ...) { # [note: display graph density and condition numbers (if compute_cond = TRUE)]
   cat("Prior effective sample size\n")
