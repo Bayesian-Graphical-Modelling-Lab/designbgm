@@ -1,0 +1,34 @@
+Package: designbgm
+Date: 2026-07-17
+Type: Package
+Title: Sample Size Planning for Bayesian Graphical Models
+Version: 0.1.0
+Authors@R: c(person(given = "Giuseppe",
+             family = "Arena",
+             role = c("aut", "cre"),
+             email = "g.arena@uva.nl",
+             comment = c(ORCID = "0000-0001-5204-3326")))
+Maintainer: Giuseppe Arena <g.arena@uva.nl>
+Description: Plans sample sizes of a prospective study for a Bayesian graphical model, given a prior elicited from a previous study. Two planning methods are available: a data-to-prior information ratio over the model parameters, and Bayes factor design analysis at a representative edge. Estimators of the prior effective sample size quantify how much information the elicited prior carries, and planned sample sizes can be validated by simulation. Gaussian graphical models are currently supported.
+License: MIT + file LICENSE
+URL: https://github.com/Bayesian-Graphical-Modelling-Lab/designbgm
+BugReports: https://github.com/Bayesian-Graphical-Modelling-Lab/designbgm/issues
+Depends:
+    R (>= 4.4.0)
+Imports:
+    stats,
+    igraph,
+    Rcpp (>= 1.1.0)
+Suggests: 
+    knitr,
+    rmarkdown,
+    tinytest
+LinkingTo:
+    Rcpp,
+    RcppArmadillo
+SystemRequirements: OpenMP
+VignetteBuilder:
+    knitr
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.3

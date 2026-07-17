@@ -1,0 +1,47 @@
+#!/bin/sh
+
+# RcppParallel flags: prefer R_HOME but fall back to Rscript on PATH
+RSCRIPT=""
+if [ -n "${R_HOME}" ]; then
+    RSCRIPT="${R_HOME}/bin/Rscript"
+else
+    RSCRIPT="$(command -v Rscript || true)"
+fi
+if [ -n "${RSCRIPT}" ]; then
+    RCPP_PARALLEL_CPPFLAGS=`"${RSCRIPT}" -e "cat(RcppParallel::CxxFlags())" 2>/dev/null || true`
+    RCPP_PARALLEL_LIBS=`"${RSCRIPT}" -e "cat(RcppParallel::LdFlags())" 2>/dev/null || true`
+else
+    RCPP_PARALLEL_CPPFLAGS=""
+    RCPP_PARALLEL_LIBS=""
+fi
+
+# # Generate src/sources.mk with the list of .cpp files under src/ (recursively)
+# # and write a Makefile fragment src/Makevars.in.
+# # Output file sources.mk
+# OUT="src/sources.mk"
+
+# # Find all .cpp files recursively under src/
+# CPP_FILES=$(find src -type f -name "*.cpp" | sed -E 's|^src/||')
+
+# # Start writing the file
+# {
+#     echo "# ------------------------------------------------------------------"
+#     echo "# AUTO-GENERATED — DO NOT EDIT"
+#     echo "# This file lists C++ sources compiled into the package."
+#     echo "# Regenerate by running './configure' (or the project's build step)."
+#     echo "# ------------------------------------------------------------------"
+#     echo "SOURCES = \\" 
+  
+#     # List each cpp file with a backslash
+#     for f in $CPP_FILES; do
+#     echo "  $f \\"
+#     done
+
+#     # Empty line at the end
+#     echo ""
+# } > "$OUT"
+
+# Substitute into Makevars
+sed -e "s|@RCPP_PARALLEL_CPPFLAGS@|${RCPP_PARALLEL_CPPFLAGS}|" \
+    -e "s|@RCPP_PARALLEL_LIBS@|${RCPP_PARALLEL_LIBS}|" \
+src/Makevars.in > src/Makevars

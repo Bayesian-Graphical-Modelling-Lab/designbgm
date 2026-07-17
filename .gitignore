@@ -1,0 +1,39 @@
+.Rproj.user/
+*.Rproj
+.Rhistory
+.RData
+
+# Editor or OS
+.vscode/
+.DS_Store
+
+# Folders
+other_code/
+zenodo/
+
+# Build and package artifacts
+*.tar.gz
+.Rcheck/
+src/*.o
+src/*.so
+src/*.dll
+src/*.dylib
+src/Makevars
+src/Makevars.win
+src/sources.mk
+inst/doc/
+doc/
+Meta/
+
+# files
+src/bsda.cpp
+src/bsda.o
+R/designbgm-notation.R
+
+# Formatting style
+.clang-format
+
+# Other
+*.log
+# /.quarto/
+# **/*.quarto_ipynb
