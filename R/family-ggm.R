@@ -10,6 +10,34 @@
 )
 
 ###############################################################################
+#                        Utility functions (helpers)                         #
+###############################################################################
+
+#' Project a precision matrix onto a fixed graph (constrained estimate)
+#'
+#' Given a precision matrix (\code{K}) and a fixed undirected graph (\code{G}), 
+#' returns the precision matrix constrained to the graph's structure, so that 
+#' entries at non-edges are (numerically) zero. Uses the node-wise regression algorithm.
+#'
+#' @param K A \eqn{p \times p} symmetric positive-definite precision matrix.
+#' @param G A \eqn{p \times p} symmetric adjacency matrix with 0/1 entries; the
+#'   zero pattern defines the conditional-independence constraints.
+#' @param tol Convergence tolerance for the iterative solver.
+#' @param itermax Maximum number of iterations.
+#' @return A \eqn{p \times p} precision matrix with zeros at the non-edges of \code{G}.
+#' @export
+constrain_precision_to_graph <- function(K, G, tol = 1e-6, itermax = 1000) {
+  p <- ncol(K)
+  neighbors <- find_neighbors(G)                      
+  idx       <- create_indices_excluding_i(p = p)
+  return(hastie_adaptation(K = K, p = p,
+                    indices_excluding_i = idx,
+                    neighbors = neighbors,
+                    tol = tol, itermax = itermax,
+                    beta_star_full = rep(0, p)))
+}
+
+###############################################################################
 #                             GGM parameters (user input)                     #
 ###############################################################################
 
@@ -366,6 +394,9 @@ prior_ess.ggm_elicited <- function(params,
 #'   correctly excluding the edge, and \code{pow1} targets
 #'   \code{Pr(BF01 < 1/threshold | H1)}, correctly detecting the edge. Both default to
 #'   0.8.
+#' @param nsim_bf BFDA only: number of Monte Carlo samples to estimate the Bayes factor 
+#'    for sparse graphs. Default 1000. Ignored for dense graphs, where the Bayes factor 
+#'    is available in closed form.
 #' @param n_tol Search tolerance, in observation units. The search stops once the
 #'   bracket reaches this width. Default 1, i.e. exact (increasing this value speeds
 #'   up the search but may reduce accuracy).
@@ -400,6 +431,7 @@ design.ggm_elicited <- function(params, method = c("DPIR", "BFDA"),
                                 target_probability = 0.95,
                                 rho_quantile = 0.5,
                                 pow0 = 0.8, pow1 = 0.8,
+                                nsim_bf = 1000L,
                                 n_tol = 1L, max_n = 5000L, ...) {
   method <- match.arg(method)
   ep <- params
@@ -458,6 +490,7 @@ design.ggm_elicited <- function(params, method = c("DPIR", "BFDA"),
           pow1        = pow1,
           threshold   = thr, 
           optimize    = TRUE, 
+          nsim_bf     = nsim_bf,
           n_tol       = n_tol, 
           max_n       = max_n
         )
@@ -489,7 +522,9 @@ design.ggm_elicited <- function(params, method = c("DPIR", "BFDA"),
   call_info <- if (method == "DPIR") {
     list(H = H, J = J, threshold = thr, target_probability = target_probability)
   } else {  # BFDA
-    list(H = H, J = J, threshold = thr, pow0 = pow0, pow1 = pow1, rho_quantile = rho_quantile)
+    ci <- list(H = H, J = J, threshold = thr, pow0 = pow0, pow1 = pow1, rho_quantile = rho_quantile)
+    if (ep$sparse) ci$nsim_bf <- nsim_bf
+    ci
   }
 
   call_info$n_tol <- n_tol

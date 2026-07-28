@@ -15,6 +15,7 @@
   rho_quantile = 0.5,
   pow0 = 0.8,
   pow1 = 0.8,
+  nsim_bf = 1000L,
   n_tol = 1L,
   max_n = 5000L,
   ...
@@ -51,6 +52,10 @@ for edge absence, \code{pow0} targets \code{Pr(BF01 > threshold | H0)},
 correctly excluding the edge, and \code{pow1} targets
 \code{Pr(BF01 < 1/threshold | H1)}, correctly detecting the edge. Both default to
 0.8.}
+
+\item{nsim_bf}{BFDA only: number of Monte Carlo samples to estimate the Bayes factor 
+for sparse graphs. Default 1000. Ignored for dense graphs, where the Bayes factor 
+is available in closed form.}
 
 \item{n_tol}{Search tolerance, in observation units. The search stops once the
 bracket reaches this width. Default 1, i.e. exact (increasing this value speeds

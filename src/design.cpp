@@ -204,12 +204,17 @@ Rcpp::List cpp_design_dpir(const std::string &prior, const arma::mat &K, const a
             Rcpp::warning("target_probability never reached for the weakest off-diagonal parameter within the provided n grid");
         }
 
+        // initialize timer to measure time for each bisection
+        arma::wall_clock timer; 
+
         // --- phase 2: bisection within bracket ---
         double prob_global_at_n_star = 0.0;  
         arma::vec prob_pw_at_n_star(n_pars, arma::fill::zeros); 
 
         // (1) Find global bisection 
+        timer.tic();
         if (global_bracketed) {
+            
             while (n_right_global - n_left_global > n_tol) {
                 if (n_left_global > max_n) break; // early stopping if left bracket exceeds max_n
                 arma::uword n_mid = (n_left_global + n_right_global) / 2;
@@ -220,9 +225,12 @@ Rcpp::List cpp_design_dpir(const std::string &prior, const arma::mat &K, const a
                 }
                 else n_left_global  = n_mid;
             }
+            
         }
+        double global_bisection_time = timer.toc();
 
         // (2) Find parameterwise bisection (based on min probability criterion, this ensures all parameters meet the target probability and we find n* as max n* across off-diag parameters)
+        timer.tic();
         if(pw_bracketed) {
             while(n_right_pw - n_left_pw > n_tol) {
                 if (n_left_global > max_n) break; // early stopping if left bracket exceeds max_n
@@ -233,9 +241,10 @@ Rcpp::List cpp_design_dpir(const std::string &prior, const arma::mat &K, const a
                     prob_pw_at_n_star = cur_prob_pw; // store probability at current n_mid for output
                 }
                 else n_left_pw  = n_mid;
-            }
+            }  
         }
-
+        double pw_bisection_time = timer.toc();
+        
         // return n* star and prob at the corresponding n* (n_star_global for global and n_star_pw for pw)
         bool converged_global = global_bracketed && (prob_global_at_n_star >= target_probability - 1e-6) && (n_right_global <= max_n);
         if(converged_global){
@@ -249,8 +258,10 @@ Rcpp::List cpp_design_dpir(const std::string &prior, const arma::mat &K, const a
             out["prob_pw_at_n_star"]        = prob_pw_at_n_star;
         }
 
-        out["converged_global"] = converged_global;
-        out["converged_pw"]     = converged_pw;
+        out["duration_global_bisection"] = global_bisection_time;
+        out["duration_pw_bisection"]     = pw_bisection_time;
+        out["converged_global"]          = converged_global;
+        out["converged_pw"]              = converged_pw;
     } 
     else {
         arma::vec global_dpir_prob(n.n_elem, arma::fill::zeros);
@@ -429,6 +440,8 @@ Rcpp::List cpp_design_bfda_edge_dense(const arma::mat &K, const arma::uword &nu,
 
         double rho_ml    = Rho(m, l);
         arma::uword n_min = static_cast<arma::uword>(p + 2);
+        arma::wall_clock timer; // to measure time for each hypothesis
+
         
         // --- hypothesis 0: bisect power_h0 ---
         double cur_power = 0.0, 
@@ -440,6 +453,7 @@ Rcpp::List cpp_design_bfda_edge_dense(const arma::mat &K, const arma::uword &nu,
         arma::uword nl_pow0      = n_min; // because as the prior becomes more informative, the n* decreases and can also be lower than nu
         arma::uword nr_pow0      = warm_start_n(0.01, p, 0.05, pow0); // define upper bracket as the n* for a partial correlation as low as 0.01
 
+        timer.tic();
         if (nr_pow0 > nl_pow0) {
             while (nr_pow0 - nl_pow0 > n_tol) {
                 if (nl_pow0 > max_n) break;
@@ -453,6 +467,7 @@ Rcpp::List cpp_design_bfda_edge_dense(const arma::mat &K, const arma::uword &nu,
                 else nl_pow0 = n_mid;
             }
         }
+        double t_h0 = timer.toc();
 
         bool converged_h0 = (pow0_at_n_star >= pow0) && (nr_pow0 <= max_n);
         if(converged_h0) {
@@ -460,6 +475,7 @@ Rcpp::List cpp_design_bfda_edge_dense(const arma::mat &K, const arma::uword &nu,
             out["fpr_at_n_star_power_h0"] = fpr_at_n_star;
             out["power_h0_at_n_star"] = pow0_at_n_star;
         }
+        out["duration_h0"]  = t_h0;
         out["converged_h0"] = converged_h0;
         
 
@@ -467,7 +483,8 @@ Rcpp::List cpp_design_bfda_edge_dense(const arma::mat &K, const arma::uword &nu,
         cur_power = 0.0; cur_error = 1.0;
         arma::uword nl_pow1      = n_min; // because as the prior becomes more informative, the n* decreases and can also be lower than nu
         arma::uword nr_pow1      = warm_start_n(rho_ml, p, 0.05, pow1) * 10; // define upper bracket as the n* for the selected partial correlation and inflate it by 10 
-
+        
+        timer.tic();
         if (nr_pow1 > nl_pow1) {
             while (nr_pow1 - nl_pow1 > n_tol) {
                 if (nl_pow1 > max_n) break;
@@ -480,7 +497,9 @@ Rcpp::List cpp_design_bfda_edge_dense(const arma::mat &K, const arma::uword &nu,
                 }
                 else nl_pow1 = n_mid;
             }
+           
         }
+        double t_h1 = timer.toc();
 
         // check convergence and store results 
         bool converged_h1 = (pow1_at_n_star >= pow1) && (nr_pow1 <= max_n);
@@ -489,6 +508,7 @@ Rcpp::List cpp_design_bfda_edge_dense(const arma::mat &K, const arma::uword &nu,
             out["fnr_at_n_star_power_h1"] = fnr_at_n_star;
             out["power_h1_at_n_star"] = pow1_at_n_star;
         }
+        out["duration_h1"]  = t_h1;
         out["converged_h1"] = converged_h1;
 
     } else {
