@@ -26,8 +26,6 @@ doc/
 Meta/
 
 # files
-src/bsda.cpp
-src/bsda.o
 R/designbgm-notation.R
 
 # Formatting style

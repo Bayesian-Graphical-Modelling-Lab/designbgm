@@ -4,7 +4,7 @@
 \alias{ggm_parameters}
 \title{Construct GGM prior parameters}
 \usage{
-ggm_parameters(K, G, nu, mu = NULL)
+ggm_parameters(K, G, nu, mu = NULL, pip = NULL)
 }
 \arguments{
 \item{K}{A \code{p} by \code{p} symmetric positive-definite precision matrix, .}
@@ -16,6 +16,9 @@ ggm_parameters(K, G, nu, mu = NULL)
 \item{mu}{Mean vector of length \code{p}. The default \code{NULL} corresponds
 to the centered (zero-mean) case that all current methods assume. Supplying
 a non-\code{NULL} \code{mu} is not yet supported.}
+
+\item{pip}{Prior inclusion probabilities. The default \code{NULL} corresponds to the uniform prior. 
+Can be a single probability or a \code{p} by \code{p} symmetric matrix with zero diagonal.}
 }
 \value{
 A \code{ggm_parameters} object, which also inherits from \code{bgm_parameters}.

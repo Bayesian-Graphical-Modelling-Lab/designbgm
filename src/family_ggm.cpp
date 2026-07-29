@@ -119,13 +119,21 @@ arma::mat cpp_precision_to_partial_correlations(const arma::mat& K) {
 } 
 
 // Random precision matrix from prior
-arma::mat random_precision_from_prior(const std::string& prior, const arma::mat& K, const int& nu, const arma::umat& G, const arma::mat& Kchol) {
+arma::mat random_precision_from_prior(const std::string& prior, 
+    const arma::mat& K, 
+    const int& nu, 
+    const arma::umat& G, 
+    const arma::mat& Kchol, 
+    const std::string& gwish_sampler, 
+    const double& gwish_tol, 
+    const arma::uword& gwish_iter,
+    const arma::uword& gwish_burnin) {
     int p = K.n_rows;
     arma::mat x(p, p, arma::fill::zeros);
     if (prior.compare("wishart") == 0) {
         x = rwishart_fast(nu, Kchol);  // Kchol is the upper triangular Cholesky factor of K
     } else if (prior.compare("gwishart") == 0) {
-        x = rgwishart(1, K, static_cast<double>(nu), G, "direct", 1e-08, 500, 500, R_NilValue).slice(0); 
+        x = rgwishart(1, K, static_cast<double>(nu), G, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, R_NilValue).slice(0); 
     } else {
         Rcpp::stop("Unknown prior '" + prior + "'. Priors available: gwishart, wishart.");
     }

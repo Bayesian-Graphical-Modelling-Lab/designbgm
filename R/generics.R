@@ -133,7 +133,6 @@ new_bgm_prior_ess <- function(family, estimates, info = NULL, prior, nu, p,
   )
 }
 
-
 #' extractor: pulls the scalar global ESS per estimator 
 #' @noRd
 .prior_ess_global <- function(x) {
@@ -185,8 +184,8 @@ summary.bgm_prior_ess <- function(object, ...) { # [note: display graph density 
 #' class of \code{params}. See the method pages listed under Details.
 #' @param params A \code{bgm_elicited} object, as returned by
 #'   \code{\link{elicit_prior}}.
-#' @param method Which planning method to use, \code{"DPIR"} (default) or
-#'   \code{"BFDA"}. One method runs per call.
+#' @param method Which planning method to use, \code{"DPIR"} (default), 
+#'   \code{"BFDA"}, or \code{"BSDA"}. One method runs per call.
 #' @param ... Method-specific arguments passed to the method (e.g.,
 #'   \code{max_n}, the largest sample size considered in the planning).
 #' @return A \code{bgm_design} object. It records the recommended sample sizes (
@@ -205,12 +204,12 @@ summary.bgm_prior_ess <- function(object, ...) { # [note: display graph density 
 #' }
 #' @family sample size planning
 #' @export
-design <- function(params, method = c("DPIR", "BFDA"), ...) {
+design <- function(params, method = c("DPIR", "BFDA", "BSDA"), ...) {
  UseMethod("design")
 }
 
 #' @export
-design.default <- function(params, method = c("DPIR", "BFDA"), ...) {
+design.default <- function(params, method = c("DPIR", "BFDA", "BSDA"), ...) {
   stop("No design() method for class ", 
   paste(class(params), collapse = "/"),". design() expects an elicited prior; see elicit_prior().", 
   call. = FALSE)
@@ -220,14 +219,14 @@ design.default <- function(params, method = c("DPIR", "BFDA"), ...) {
 #' @param family Character scalar, e.g. "ggm" family.
 #' @param prior Character scalar, e.g. "gwishart" prior.
 #' @param method Character scalar referring to the selected planning method, 
-#'    either \code{"DPIR"} or \code{"BFDA"}.
+#'    either \code{"DPIR"}, \code{"BFDA"}, or \code{"BSDA"}.
 #' @param results List of method-specific results.
 #' @param call_info List of call information.
 #' @param ep Optional \code{bgm_elicited} object, the elicited prior used in the planning.
 #' @return An object of class \code{c("<family>_design", "bgm_design")}
 #' @noRd
 new_bgm_design <- function(family, prior, method, results, call_info = list(), ep = NULL) {
-  method <- match.arg(method, c("DPIR", "BFDA"))
+  method <- match.arg(method, c("DPIR", "BFDA", "BSDA"))
   structure(
     list(family = family, prior = prior, method = method,
          results = results, call_info = call_info, ep = ep),
@@ -240,20 +239,24 @@ new_bgm_design <- function(family, prior, method, results, call_info = list(), e
 #' @noRd
 .design_n_star <- function(x) {
   r <- x$results
-  if (x$method == "DPIR") {
-    list(global = if (!is.null(r$n_star_global)) as.integer(r$n_star_global) else NA_integer_,
-         pw     = if (!is.null(r$n_star_pw))     as.integer(r$n_star_pw)     else NA_integer_)
-  } else { # BFDA
-    list(h0 = if (!is.null(r$n_star_power_h0)) as.integer(r$n_star_power_h0) else NA_integer_,
-         h1 = if (!is.null(r$n_star_power_h1)) as.integer(r$n_star_power_h1) else NA_integer_)
-  }
+  switch(x$method,
+    DPIR = list(global = if (!is.null(r$n_star_global)) as.integer(r$n_star_global) else NA_integer_,
+                pw     = if (!is.null(r$n_star_pw))     as.integer(r$n_star_pw)     else NA_integer_),
+    BFDA = list(h0 = if (!is.null(r$n_star_power_h0)) as.integer(r$n_star_power_h0) else NA_integer_,
+                h1 = if (!is.null(r$n_star_power_h1)) as.integer(r$n_star_power_h1) else NA_integer_),
+    BSDA = list(n_star = if (!is.null(r$n_star) && is.finite(r$n_star))
+                           as.integer(round(r$n_star)) else NA_integer_)
+  )
 }
 
 #' @noRd
 .design_converged <- function(x) {
   r <- x$results
-  if (x$method == "DPIR") c(global = isTRUE(r$converged_global), pw = isTRUE(r$converged_pw))
-  else                    c(h0 = isTRUE(r$converged_h0),         h1 = isTRUE(r$converged_h1))
+  switch(x$method,
+    DPIR = c(global = isTRUE(r$converged_global), pw = isTRUE(r$converged_pw)),
+    BFDA = c(h0 = isTRUE(r$converged_h0),         h1 = isTRUE(r$converged_h1)),
+    BSDA = c(n_star = isTRUE(x$results$converged))
+  )
 }
 
 ###############################################################################
@@ -290,7 +293,7 @@ validate.default <- function(plan, ...){
 #' Construct a design validation object 
 #' @param family Character scalar, e.g. "ggm" family.
 #' @param method Character scalar referring to the selected planning method, 
-#'    either \code{"DPIR"} or \code{"BFDA"}.
+#'    either \code{"DPIR"}, \code{"BFDA"}, or \code{"BSDA"}.
 #' @param scope BFDA only: \code{"planning_edge"} (default) or \code{"all_edges"} 
 #'    (the guarantee check over all present edges). Ignored for DPIR.
 #' @param prior Character scalar, e.g. "gwishart" prior.

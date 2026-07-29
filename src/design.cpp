@@ -1,4 +1,5 @@
 #include <string>
+#include <cmath>
 #include <RcppArmadillo.h>
 #include "helpers.h"
 #include "family_ggm.h"
@@ -12,7 +13,9 @@ Rcpp::List cpp_design_dpir(const std::string &prior, const arma::mat &K, const a
                         const arma::umat &G, const arma::uword &H, 
                         const arma::uword &J, arma::uvec &n, const double &threshold = 1.0, 
                         const bool optimize = false, const double &target_probability = 0.95, 
-                        const arma::uword &n_tol = 1, const arma::uword &max_n = 10000) {
+                        const arma::uword &n_tol = 1, const arma::uword &max_n = 10000, 
+                        const std::string &gwish_sampler = "direct", const double &gwish_tol = 1e-08, 
+                        const int &gwish_iter = 500, const int &gwish_burnin = 500) {
 
     Rcpp::List out;
     arma::uword p = K.n_cols;
@@ -56,7 +59,7 @@ Rcpp::List cpp_design_dpir(const std::string &prior, const arma::mat &K, const a
             prob_global = 0.0;
             const double inv_HJ = 1.0 / static_cast<double>(H * J);
             for (arma::uword h = 0; h < H; h++) {
-                arma::mat K_h = random_precision_from_prior(prior, K, nu, G, Kchol);
+                arma::mat K_h = random_precision_from_prior(prior, K, nu, G, Kchol, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin);
                 arma::mat S_h = arma::inv_sympd(K_h);
                 arma::mat cholS_h = arma::chol(S_h, "lower");
                 // arma::mat prior_info_full = 0.5 * scale * (D * arma::kron(S_h, S_h) * D.t());
@@ -85,7 +88,7 @@ Rcpp::List cpp_design_dpir(const std::string &prior, const arma::mat &K, const a
             prob_pw.zeros();
             const double inv_HJ = 1.0 / static_cast<double>(H * J);
             for (arma::uword h = 0; h < H; h++) {
-                arma::mat K_h = random_precision_from_prior(prior, K, nu, G, Kchol);
+                arma::mat K_h = random_precision_from_prior(prior, K, nu, G, Kchol, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin);
                 arma::mat S_h = arma::inv_sympd(K_h);
                 arma::mat cholS_h = arma::chol(S_h, "lower");
                 // arma::mat prior_info_full = 0.5 * scale * (D * arma::kron(S_h, S_h) * D.t());
@@ -115,7 +118,7 @@ Rcpp::List cpp_design_dpir(const std::string &prior, const arma::mat &K, const a
             prob_pw.zeros();
             const double inv_HJ = 1.0 / static_cast<double>(H * J);
             for (arma::uword h = 0; h < H; h++) {
-                arma::mat K_h = random_precision_from_prior(prior, K, nu, G, Kchol);
+                arma::mat K_h = random_precision_from_prior(prior, K, nu, G, Kchol, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin);
                 arma::mat S_h = arma::inv_sympd(K_h);
                 arma::mat cholS_h = arma::chol(S_h, "lower");
                 // arma::mat prior_info_full = 0.5 * scale * (D * arma::kron(S_h, S_h) * D.t());
@@ -287,7 +290,7 @@ Rcpp::List cpp_design_dpir(const std::string &prior, const arma::mat &K, const a
                 determinant_ratio_value;
 
         for (arma::uword h = 0; h < H; h++) {
-                K_h = random_precision_from_prior(prior, K, nu, G, Kchol); // random draw from the prior distribution
+                K_h = random_precision_from_prior(prior, K, nu, G, Kchol, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin); // random draw from the prior distribution
                 S_h = arma::inv_sympd(K_h); // convert random precision draw to random covariance matrix
                 cholS_h = arma::chol(S_h, "lower");
                 //prior_info_full = 0.5 * scale * (D * arma::kron(S_h,S_h) * D.t()); // full Fisher information of the prior (all parameters)
@@ -389,7 +392,9 @@ Rcpp::List cpp_design_bfda_edge_dense(const arma::mat &K, const arma::uword &nu,
                                     const arma::uword &H, const arma::uword &J, arma::uvec &n,
                                     const double &pow0 = 0.8, const double &pow1 = 0.8,
                                     const double &threshold = 10.0, const bool optimize = false, 
-                                    const arma::uword &n_tol = 1, const arma::uword &max_n = 10000) {
+                                    const arma::uword &n_tol = 1, const arma::uword &max_n = 10000, 
+                                    const std::string &gwish_sampler = "direct", const double &gwish_tol = 1e-08, 
+                                    const arma::uword &gwish_iter = 500, const arma::uword &gwish_burnin = 500) {
 
     Rcpp::List out;
     arma::uword p = K.n_cols;
@@ -418,7 +423,7 @@ Rcpp::List cpp_design_bfda_edge_dense(const arma::mat &K, const arma::uword &nu,
             }
             arma::uword idx = 0;
             for (arma::uword h = 0; h < H; h++) {
-                arma::mat K_h     = random_precision_from_prior(prior, K, nu, G_temp, Kchol);
+                arma::mat K_h     = random_precision_from_prior(prior, K, nu, G_temp, Kchol, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin);
                 arma::mat S_h     = arma::inv_sympd(K_h);
                 arma::mat cholS_h = arma::chol(S_h, "lower");
                 for (arma::uword j = 0; j < J; j++) {
@@ -527,7 +532,7 @@ Rcpp::List cpp_design_bfda_edge_dense(const arma::mat &K, const arma::uword &nu,
             arma::mat bf_vals(n.n_elem, H * J, arma::fill::zeros);
             arma::uword counter_iter = 0;
             for (arma::uword h = 0; h < H; h++) {
-                arma::mat K_h    = random_precision_from_prior(prior, K, nu, G_temp, Kchol); //rgwishart(1, K, nu, G_temp, 1e-08, 500).slice(0);
+                arma::mat K_h    = random_precision_from_prior(prior, K, nu, G_temp, Kchol, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin); //rgwishart(1, K, nu, G_temp, 1e-08, 500).slice(0);
                 arma::mat S_h    = arma::inv_sympd(K_h);
                 arma::mat cholSh = arma::chol(S_h, "lower");
                 for (arma::uword j = 0; j < J; j++) {
@@ -892,7 +897,8 @@ Rcpp::List cpp_design_bfda_edge_sparse(const arma::mat &K,  // K is already elic
                                     const double &pow0 = 0.8, const double &pow1 = 0.8,
                                     const double &threshold = 10.0, const bool optimize = false, 
                                     const int nsim_bf = 1000, const arma::uword &n_tol = 1, 
-                                    const arma::uword &max_n = 10000) {
+                                    const arma::uword &max_n = 10000, const std::string &gwish_sampler = "direct", 
+                                    const double &gwish_tol = 1e-08, const arma::uword &gwish_iter = 500, const arma::uword &gwish_burnin = 500) {
 
     Rcpp::List out;
     arma::uword p = K.n_cols;
@@ -931,7 +937,7 @@ Rcpp::List cpp_design_bfda_edge_sparse(const arma::mat &K,  // K is already elic
             // hypothesis 1: G_temp keeps original G (edge present)
             arma::uword idx = 0;
             for (arma::uword h = 0; h < H; h++) {
-                arma::mat K_h     = rgwishart(1, K, nu, G_temp, "direct", 1e-08, 500, 500, R_NilValue).slice(0);  
+                arma::mat K_h     = rgwishart(1, K, nu, G_temp, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, R_NilValue).slice(0);  
                 arma::mat S_h     = arma::inv_sympd(K_h);
                 arma::mat cholS_h = arma::chol(S_h, "lower");
                 for (arma::uword j = 0; j < J; j++) {
@@ -1040,7 +1046,7 @@ Rcpp::List cpp_design_bfda_edge_sparse(const arma::mat &K,  // K is already elic
                 arma::mat bf_vals(n.n_elem, H * J, arma::fill::zeros);
                 arma::uword counter_iter = 0;
                 for (arma::uword h = 0; h < H; h++) {
-                    arma::mat K_h    = rgwishart(1, K, nu, G_temp, "direct", 1e-08, 500, 500, R_NilValue).slice(0); 
+                    arma::mat K_h    = rgwishart(1, K, nu, G_temp, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, R_NilValue).slice(0); 
                     arma::mat S_h    = arma::inv_sympd(K_h);
                     arma::mat cholSh = arma::chol(S_h, "lower");
                     for (arma::uword j = 0; j < J; j++) {
@@ -1087,7 +1093,7 @@ Rcpp::List cpp_design_bfda_edge_sparse(const arma::mat &K,  // K is already elic
                 arma::mat bf_vals(n.n_elem, H * J, arma::fill::zeros);
                 arma::uword counter_iter = 0;
                 for (arma::uword h = 0; h < H; h++) {
-                    arma::mat K_h    = rgwishart(1, K, nu, G_temp, "direct", 1e-08, 500, 500, R_NilValue).slice(0);  
+                    arma::mat K_h    = rgwishart(1, K, nu, G_temp, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, R_NilValue).slice(0);  
                     arma::mat S_h    = arma::inv_sympd(K_h);
                     arma::mat cholSh = arma::chol(S_h, "lower");
                     for (arma::uword j = 0; j < J; j++) {
@@ -1128,4 +1134,559 @@ Rcpp::List cpp_design_bfda_edge_sparse(const arma::mat &K,  // K is already elic
     out["m"] = m;
     out["l"] = l;
     return out;
+}
+
+
+// =============================================================================
+// BSDA: Bayesian Structural Design Analysis via Probit inversion
+// =============================================================================
+
+// Evaluation of Pr(measure > measure_value), that is the power at a single n.
+// [[Rcpp::export]]
+Rcpp::List power_at_n(
+        const arma::mat&  K,            // elicited precision scale from a ggm_elicited object via elicit_prior.ggm_parameters()
+        const arma::mat&  G,            // true adjacency, symmetric 0/1
+        const arma::mat&  pip,          // elicited PIPs (prior inclusion probabilities)
+        int               p,
+        int               n,           // sample size to evaluate at
+        int               H,           // number of outer (K_h) draws 
+        int               J,           // datasets per draw (use 1)
+        int               nu,
+        std::string       gwish_sampler, // "direct" or "block"
+        double            gwish_tol,
+        arma::uword       gwish_iter,
+        arma::uword       gwish_burnin,
+        double            edge_selection_threshold,
+        std::string       measure,     // "sen" or "spe"
+        double            measure_value,
+        std::string       init          = "empty",   // "prior" or "empty" or "truth"
+        int               fit_iterations = 10000,
+        int               fit_burnin     = 5000,
+        double            alpha          = 0.05,
+        Rcpp::Nullable<int> seed         = R_NilValue) // set the same seed at every n for common random numbers
+{
+    Rcpp::RNGScope scope;
+
+    // common random numbers: identical seed -> identical K_h sequence across n,
+    // which cancels the between-draw variance from differences along the curve.
+    if (seed.isNotNull()) {
+        Rcpp::Environment base("package:base");
+        Rcpp::Function set_seed = base["set.seed"];
+        set_seed(Rcpp::as<int>(seed));
+    }
+
+    const bool sen = (measure == "sen");
+    if (!sen && measure != "spe") Rcpp::stop("measure must be \"sen\" or \"spe\"");
+
+    const arma::uvec ut  = arma::trimatu_ind(arma::size(G), 1);
+    const arma::vec  gtr = G.elem(ut);
+    const double P1 = arma::accu(gtr > 0.5);
+    const double P0 = (double)gtr.n_elem - P1;
+    if (sen  && P1 == 0.0) Rcpp::stop("sensitivity undefined: no true edges");
+    if (!sen && P0 == 0.0) Rcpp::stop("specificity undefined: no true non-edges");
+
+
+    // define the measure function to compute sensitivity or specificity from a given posterior edge probability vector
+    const double thr = edge_selection_threshold;
+    auto score = [&](const arma::vec& gh) {
+        if (sen) { double TP = arma::accu((gh > thr) % (gtr > 0.5)); return TP / P1; }
+        else     { double TN = arma::accu((gh < thr) % (gtr < 0.5)); return TN / P0; }
+    };
+
+    const arma::umat G_u = (G > 0.5);
+    const arma::vec  mu(p, arma::fill::zeros);
+
+    // precompute the prior scale matrix for the G-Wishart sampler
+    // K is the elicited prior scale matrix = K_prior / nu  (nu = nu = prior df)
+    const arma::mat scale_prior = K;                  // = K_prior / nu
+    const arma::mat D0          = arma::inv_sympd(K); // = nu * K_prior^{-1}
+
+    // precompute the log-odds of the elicited edge prior probabilities for use in the sampler
+    arma::mat plo(p, p, arma::fill::zeros);
+    for (int i = 0; i < p; ++i)
+        for (int j = i + 1; j < p; ++j) {
+            double q = std::min(std::max(pip(i, j), 1e-12), 1.0 - 1e-12);
+            plo(i, j) = std::log(q / (1.0 - q));
+        }
+
+    // analysis-side start graph -- this is not the truth unless explicitly requested.
+    // "prior"  = prior-median model 1[pip>0.5]   
+    // "empty"  = no edges                        (overdispersed start)
+    // "truth"  = the true G                      (optimistic)
+    arma::mat G_start;
+    if (init != "empty" && init != "prior" && init != "truth" && init != "random")
+    Rcpp::stop("init must be one of \"empty\", \"prior\", \"truth\", \"random\"");
+    if (init == "truth")      G_start = G;
+    else if (init == "empty") G_start = arma::zeros<arma::mat>(p, p);
+    else if (init == "random") { // make it an input in a future version, but for now just a random graph with the elicited pip
+        G_start = arma::zeros<arma::mat>(p, p);
+        for (arma::uword a = 0; a < (arma::uword)p; ++a)
+            for (arma::uword b = a + 1; b < (arma::uword)p; ++b)
+                if (R::runif(0.0, 1.0) < pip(a, b)) { G_start(a, b) = G_start(b, a) = 1.0; }
+    }
+    else {
+        arma::mat pm = arma::zeros<arma::mat>(p, p);
+        for (arma::uword a = 0; a < (arma::uword)p; ++a)
+            for (arma::uword b = a + 1; b < (arma::uword)p; ++b)
+                if (pip(a, b) > 0.5) { pm(a, b) = pm(b, a) = 1.0; }
+        G_start = pm;
+    }
+    
+    // fixed-H loop, Welford accumulators, NO early stopping 
+    double mean_pow = 0.0, M2 = 0.0, mean_measure = 0.0;
+    arma::vec pow_batches(H, arma::fill::zeros);
+    arma::vec meas_batches(H, arma::fill::zeros);
+
+    for (int h = 1; h <= H; ++h) {
+        //Rcpp::Rcout << "h=" << h << "/" << H << "  n=" << n << std::endl;
+        arma::mat K_h = rgwishart((arma::uword)1, scale_prior, nu, G_u, gwish_sampler,
+                                  gwish_tol, gwish_iter, 0,
+                                  Rcpp::Nullable<arma::mat>()).slice(0);
+        const arma::mat Sigma_h = arma::inv_sympd(K_h);
+        const arma::mat cholS_h = arma::chol(Sigma_h);      // upper
+
+        double pow_j = 0.0, val_j = 0.0;
+        for (int j = 0; j < J; ++j) {
+            const arma::mat X_j = mvnrnd_chol(mu, cholS_h, n);
+            const arma::mat XXt = X_j.t() * X_j;
+            const arma::mat Dn = D0 + XXt;
+            const arma::mat scale_post  = arma::inv_sympd(Dn);   
+            bdmcmc_dcbf_result fit = bdmcmc_dcbf_sampler(n, nu, D0, Dn, scale_prior, scale_post, plo, G_start, fit_iterations, fit_burnin, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin);
+            arma::mat Ghat  = fit.pip;
+            // continuous time sampler (need to include a switch function to select between the two samplers)
+            // Rcpp::List fit = bdmcmc_dct_sampler(D0, Dn, scale_prior, scale_post, n, nu, plo, G_start, fit_iterations, fit_burnin, gwish_tol, gwish_iter, gwish_burnin);
+            // arma::mat Ghat  = Rcpp::as<arma::mat>(fit["pip_rb"]);
+            const arma::vec gh = Ghat.elem(ut);
+            const double val = score(gh);
+            pow_j += (val > measure_value) ? 1.0 : 0.0;
+            val_j += val;
+        }
+        pow_j /= (double)J;
+        val_j /= (double)J;
+        pow_batches(h - 1)  = pow_j;
+        meas_batches(h - 1) = val_j;
+
+        const double d1 = pow_j - mean_pow;
+        mean_pow     += d1 / (double)h;
+        M2           += d1 * (pow_j - mean_pow);
+        mean_measure += (val_j - mean_measure) / (double)h;
+    }
+
+    // batch-means CI half-width (fixed H, so this is a clean CLT interval)
+    double halfwidth = arma::datum::nan;
+    if (H >= 2) {
+        const double var_b = M2 / (double)(H - 1);
+        const double se_b  = std::sqrt(var_b / (double)H);
+        const double tq    = R::qt(1.0 - alpha / 2.0, (double)(H - 1), 1, 0);
+        halfwidth = tq * se_b;
+    }
+
+    return Rcpp::List::create(
+        Rcpp::Named("n")            = n,
+        Rcpp::Named("power")        = mean_pow,
+        Rcpp::Named("halfwidth")    = halfwidth,
+        Rcpp::Named("measure")      = mean_measure,
+        Rcpp::Named("H")            = H,
+        Rcpp::Named("J")            = J,
+        Rcpp::Named("pow_batches")  = pow_batches,   // per-batch, for CI / bootstrap
+        Rcpp::Named("meas_batches") = meas_batches);
+}
+
+// integer log-spaced grid on [lo, hi] with m points (unique, sorted)
+static arma::ivec bsda_log_grid(int lo, int hi, int m) {
+    if (lo < 2) lo = 2;
+    arma::vec lg = arma::linspace(std::log((double)lo), std::log((double)hi), m);
+    arma::ivec g = arma::conv_to<arma::ivec>::from(arma::round(arma::exp(lg)));
+    return arma::unique(g);                        // unique() sorts ascending
+}
+
+// struct to hold grid evaluation results
+struct GridEval { 
+    arma::ivec n; 
+    arma::vec power, hw, meas, se; 
+}; 
+
+static GridEval bsda_eval_grid(
+        const arma::ivec& grid,
+        const arma::mat& K, 
+        const arma::mat& G, 
+        const arma::mat& pip, 
+        int p,
+        int nu, 
+        int H, 
+        int J, 
+        std::string gwish_sampler,
+        double gwish_tol, 
+        arma::uword gwish_iter,
+        arma::uword gwish_burnin,
+        double thr, 
+        const std::string& measure, 
+        double measure_value,
+        const std::string& init, 
+        int fit_iterations, 
+        int fit_burnin, 
+        double alpha,
+        const char* tag, 
+        bool verbose) {
+
+    const int m = (int)grid.n_elem;
+
+    // allocate output struct
+    GridEval e; 
+    e.n = grid;
+    e.power.set_size(m); 
+    e.hw.set_size(m); 
+    e.meas.set_size(m); 
+    e.se.set_size(m);
+
+    const double tq = R::qt(1.0 - alpha / 2.0, (double)(H - 1), 1, 0);
+
+    for (int i = 0; i < m; ++i) {
+        Rcpp::List r = power_at_n(K, G, pip, p, (int)grid(i), H, J, nu,
+                                  gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, thr, measure, measure_value,
+                                  init, fit_iterations, fit_burnin, alpha, R_NilValue);
+        e.power(i) = Rcpp::as<double>(r["power"]);
+        e.hw(i)    = Rcpp::as<double>(r["halfwidth"]);
+        e.meas(i)  = Rcpp::as<double>(r["measure"]);
+        e.se(i)    = e.hw(i) / tq;
+        if (verbose) Rcpp::Rcout << "  [" << tag << "] n=" << grid(i) << "  power="
+                                 << std::fixed << std::setprecision(3) << e.power(i)
+                                 << "  meas=" << e.meas(i) << "\n";
+    }
+    return e;
+}
+
+// Refined grid from the scout in 5 steps:
+// (1) find interior (moving) region padded one point each
+// (2) if interior is empty, use the full range [range_lower, max_n] otherwise use the interior range
+// (3) find padded range via lo_idx -=1 and hi_idx += 1, then convert to lo and hi sample sizes 
+// (4) apply bsda_log_grid to the padded range to get the refined grid
+// (5) fallback to bsda_log_grid(range_lower, max_n, n_main) if the refined grid has < 3 points
+static arma::ivec bsda_refine_grid(const GridEval& s, 
+                                    int range_lower, 
+                                    int max_n,                     
+                                    int n_main, 
+                                    double eps) {
+    arma::uvec interior = arma::find((s.power > eps) % (s.power < 1.0 - eps));
+    int lo, hi;
+    if (interior.n_elem == 0) {
+        lo = range_lower; hi = max_n;
+    } else {
+        arma::uword lo_idx = interior.min();
+        arma::uword hi_idx = interior.max();
+        if (lo_idx > 0)              lo_idx -= 1;
+        if (hi_idx + 1 < s.n.n_elem) hi_idx += 1;
+        lo = (int)s.n(lo_idx); hi = (int)s.n(hi_idx);
+    }
+    arma::ivec g = bsda_log_grid(lo, hi, n_main);
+    if ((int)g.n_elem < 3) g = bsda_log_grid(range_lower, max_n, n_main);
+    return g;
+}
+
+// struct to hold the probit inversion results
+struct ProbitResult {
+    double a, b, n_star, ci_lo, ci_hi, keep_frac;
+    int n_nonsat; 
+    bool mismatch; 
+    std::string slope, direction;
+};
+
+static ProbitResult bsda_probit_invert(const arma::ivec& n, 
+                                        const arma::vec& power, 
+                                        const arma::vec& se,
+                                        const std::string& measure, 
+                                        double target_pow, double eps, 
+                                        int n_boot){
+    ProbitResult R0;
+    const int m = (int)n.n_elem;
+    const bool expected_inc = (measure == "sen"); // sensitivity is expected to increase with n, specificity is expected to decrease with n
+    R0.mismatch = false;
+
+    // probit transform + delta-method sd (scalar qnorm/dnorm; arma for the rest)
+    arma::vec y = arma::clamp(power, eps, 1.0 - eps);
+    arma::vec z(m), sz(m), x = arma::log(arma::conv_to<arma::vec>::from(n));
+    for (int i = 0; i < m; ++i) {
+        z(i) = R::qnorm(y(i), 0.0, 1.0, 1, 0);
+        double dz = R::dnorm(z(i), 0.0, 1.0, 0);
+        if (dz < 1e-12) dz = 1e-12;
+        sz(i) = se(i) / dz;
+    }
+    sz = arma::clamp(sz, 1e-3, arma::datum::inf);        // floor (was std::max)
+    arma::vec w = 1.0 / (sz % sz);
+
+    // fit only NON-SATURATED points
+    arma::uvec keep = arma::find((power > eps) % (power < 1.0 - eps));
+    R0.n_nonsat = (int)keep.n_elem;
+    if (R0.n_nonsat < 3) {
+        R0.a = R0.b = R0.n_star = R0.ci_lo = R0.ci_hi = R0.keep_frac = NA_REAL;
+        R0.slope = "undetermined";
+        R0.direction = expected_inc ? "lower_crossing" : "upper_bound";
+        return R0;
+    }
+
+    arma::vec zf = z.elem(keep), wf = w.elem(keep), xf = x.elem(keep);
+    arma::mat X(R0.n_nonsat, 2); X.col(0).ones(); X.col(1) = xf;
+    arma::mat XtWX = X.t() * arma::diagmat(wf) * X;
+    arma::vec beta = arma::solve(XtWX, X.t() * (wf % zf));
+    R0.a = beta(0); R0.b = beta(1);
+
+    arma::vec resid = zf - X * beta;
+    const double sigma2 = arma::accu(wf % resid % resid) / (double)(R0.n_nonsat - 2);
+    arma::mat Vb = sigma2 * arma::inv_sympd(XtWX);
+
+    const bool obs_inc = (R0.b > 0.0);
+    R0.mismatch  = (obs_inc != expected_inc);
+    R0.slope     = obs_inc ? "increasing" : "decreasing";
+    R0.direction = obs_inc ? "lower_crossing" : "upper_bound";
+
+    const double zt = R::qnorm(target_pow, 0.0, 1.0, 1, 0);
+    R0.n_star = (std::abs(R0.b) < 1e-8) ? NA_REAL : std::exp((zt - R0.a) / R0.b);
+
+    // vectorized parametric bootstrap (no std::vector / push_back)
+    arma::mat Lc = arma::chol(Vb);                       // Vb = Lc' Lc
+    arma::mat Zr(n_boot, 2); Zr.imbue([]() { return R::rnorm(0.0, 1.0); });
+    arma::mat ab = Zr * Lc; ab.col(0) += R0.a; ab.col(1) += R0.b;
+
+    arma::vec bcol = ab.col(1); // [NOTE] if near-zero draws --> Inf in nall --> possible Inf in ci_hi --> should add a guard here
+    arma::vec nall = arma::exp((zt - ab.col(0)) / bcol);         // all draws
+
+    // observed-sign side
+    arma::uvec ok;
+    if (obs_inc) 
+        ok = arma::find(bcol > 0.0); 
+    else         
+        ok = arma::find(bcol < 0.0);
+
+    arma::vec kept = nall.elem(ok);
+    R0.ci_lo = arma_quantile(kept, 0.05);
+    R0.ci_hi = arma_quantile(kept, 0.95);
+    R0.keep_frac = (double)ok.n_elem / (double)n_boot;
+    return R0;
+}
+
+
+// This is the version with the point accumulating strategy, which is more efficient and robust.
+// Each refined grid only evaluates n values not already present, and the probit
+// is fitted to the whole accumulated set. Saturated points (power 0 or 1) are
+// kept in the store but excluded from the fit, since the probit link is
+// undefined there. This stops discarding the expensive scout evaluations and
+// avoids re-simulating n values already seen.
+// [[Rcpp::export]]
+Rcpp::List cpp_bsda_probit(
+        const arma::mat&  K,
+        const arma::mat&  G,
+        const arma::mat&  pip,
+        int               p,
+        int               nu,
+        std::string       measure,          // "sen" or "spe"
+        double            measure_value,
+        double            target_pow,
+        int               range_lower,
+        int               max_n,
+        int               n_scout        = 6,
+        int               n_main         = 10,
+        int               H              = 50,
+        int               H_scout        = 20,
+        int               J              = 1,
+        double            scout_frac     = 1.0/3.0,
+        std::string       gwish_sampler  = "direct",
+        double            gwish_tol      = 1e-08,
+        arma::uword       gwish_iter     = 500,
+        arma::uword       gwish_burnin   = 500,
+        double            edge_selection_threshold = 0.5,
+        std::string       init           = "empty",
+        int               fit_iterations = 10000,
+        int               fit_burnin     = 5000,
+        double            alpha          = 0.05,
+        int               n_boot         = 5000,
+        double            eps            = 1e-3,
+        int               tol            = 2,
+        double            tol_frac       = 0.01, // relative convergence: |n* - prev| / n* < tol_frac
+        int               max_iter       = 10,
+        bool              verbose        = true) {
+
+    Rcpp::RNGScope scope;
+    arma::wall_clock timer;
+    timer.tic();
+
+    if (range_lower < 2)      range_lower = 2;
+    if (max_n <= range_lower) Rcpp::stop("max_n must exceed range_lower");
+    const double thr = edge_selection_threshold;
+
+    int iter_scout = (int)std::round(fit_iterations * scout_frac);
+    int burn_scout = (int)std::round(fit_burnin     * scout_frac);
+    if (iter_scout < 1) iter_scout = 1;
+    if (burn_scout < 1) burn_scout = 1;
+
+    // Persistent store of every point evaluated, across scout and all main
+    // passes. Kept sorted implicitly by re-sorting before each fit.
+    std::vector<int>    store_n;
+    std::vector<double> store_pow, store_se, store_meas;
+
+    // utility function to check if n has already been evaluated (exact integer match)
+    auto already_have = [&](int nq) {
+        for (int ns : store_n) if (ns == nq) return true;
+        return false;
+    };
+
+    // utility function to append a GridEval's points to the store, skipping n already present
+    auto append_to_store = [&](const GridEval& ev) {
+        for (arma::uword i = 0; i < ev.n.n_elem; ++i) {
+            int ni = (int)ev.n(i);
+            if (already_have(ni)) continue;
+            store_n.push_back(ni);
+            store_pow.push_back(ev.power(i));
+            store_se.push_back(ev.se(i));
+            store_meas.push_back(ev.meas(i));
+        }
+    };
+
+    // Step 1: explore coarse grid -- seed the store with these (they pin the tails the
+    // narrow refined grids can never reach). Lower precision (H_scout), so
+    // their standard error is larger and the fit downweights them accordingly.
+    arma::ivec scout_grid = bsda_log_grid(range_lower, max_n, n_scout);
+    if (verbose) Rcpp::Rcout << "[scout] " << scout_grid.n_elem << " pts, H=" << H_scout
+                             << " iters=" << iter_scout << "\n";
+    GridEval scout = bsda_eval_grid(scout_grid, K, G, pip, p, nu, H_scout, J, gwish_sampler,
+                                    gwish_tol, gwish_iter, gwish_burnin, thr, measure, measure_value,
+                                    init, iter_scout, burn_scout, alpha, "scout", verbose);
+    append_to_store(scout);
+
+    // initial range comes from the scout
+    arma::ivec cur_grid = bsda_refine_grid(scout, range_lower, max_n, n_main, eps);
+
+    // Steps 2-4 loop until |n* change| <= tolerance (or max_iter)
+    double  n_star_prev = arma::datum::inf;
+    ProbitResult fit;     // holds the probit inversion results
+    bool converged = false;
+    int  iter_counter = 0;
+
+    for (int it = 0; it < max_iter; ++it) {
+
+        iter_counter++;
+
+        // Step 3: evaluate only the points of cur_grid not already in the store
+        std::vector<int> fresh;
+        for (arma::uword i = 0; i < cur_grid.n_elem; ++i) {
+            int ni = (int)cur_grid(i);
+            if (!already_have(ni)) fresh.push_back(ni);
+        }
+
+        if (!fresh.empty()) {
+            arma::ivec fresh_grid = arma::conv_to<arma::ivec>::from(fresh);
+            GridEval ev = bsda_eval_grid(fresh_grid, K, G, pip, p, nu, H, J, gwish_sampler,
+                                gwish_tol, gwish_iter, gwish_burnin, thr, measure, measure_value,
+                                init, fit_iterations, fit_burnin, alpha, "main", verbose);
+            append_to_store(ev);
+        }
+
+        if (verbose) {
+            Rcpp::Rcout << "[current] grid:";
+            for (arma::uword i = 0; i < cur_grid.n_elem; ++i)
+                Rcpp::Rcout << " " << cur_grid(i);
+            Rcpp::Rcout << "  (" << fresh.size() << " new, " << store_n.size()
+                        << " total in store)\n";
+        }
+
+        // -- assemble the accumulated set, sorted ascending by n --------------
+        arma::uword M = store_n.size();
+        arma::ivec all_n(M);
+        arma::vec all_pow(M), all_se(M), all_meas(M);
+        for (arma::uword k = 0; k < M; ++k) {
+            all_n(k)    = (double)store_n[k];
+            all_pow(k)  = store_pow[k];
+            all_se(k)   = store_se[k];
+            all_meas(k) = store_meas[k];
+        }
+        arma::uvec ord = arma::sort_index(all_n);
+        all_n = all_n(ord); 
+        all_pow = all_pow(ord);
+        all_se = all_se(ord); 
+        all_meas = all_meas(ord);
+
+        // Step 4: probit inversion on the non-saturated accumulated points.
+        // Saturated (power 0 or 1) stay in the store but are dropped here --
+        // the probit link is undefined at the boundaries.
+        arma::uvec keep = arma::find(all_pow > 0.0 && all_pow < 1.0);
+        fit = bsda_probit_invert(all_n(keep), all_pow(keep), all_se(keep), measure,
+                                 target_pow, eps, n_boot);
+
+        if (verbose) Rcpp::Rcout << "a=" << fit.a << " b=" << fit.b << " [" << fit.slope
+                                 << " -> " << fit.direction << "] n_nonsat=" << fit.n_nonsat
+                                 << " n*=" << fit.n_star << " CI[" << fit.ci_lo << ", "
+                                 << fit.ci_hi << "] keep=" << fit.keep_frac << "\n";
+
+        // converged if EITHER the absolute or the relative change is within tolerance
+        double delta = std::abs(fit.n_star - n_star_prev);
+        bool within_abs = delta <= (double)tol;
+        bool within_rel = std::isfinite(fit.n_star) && fit.n_star > 0 &&
+                        delta / fit.n_star <= tol_frac;
+        if (verbose)
+            Rcpp::Rcout << "  [conv] delta=" << delta << " tol=" << tol
+                        << " rel=" << (fit.n_star > 0 ? delta / fit.n_star : NA_REAL)
+                        << " tol_frac=" << tol_frac << "\n";
+        if (std::isfinite(fit.n_star) && (within_abs || within_rel)) {
+            converged = true;
+            break;
+        }
+        n_star_prev = fit.n_star;
+
+        // Step 2 (re-refine): narrow the grid around the current CI.
+        // If every point of the new grid is already in the store, the next
+        // pass evaluates nothing, the fit is unchanged, and the loop converges
+        // on the following iteration (|n* change| == 0).
+        if (fit.n_nonsat >= 3 && std::isfinite(fit.ci_lo) && std::isfinite(fit.ci_hi)) {
+            int lo = std::max(range_lower, (int)std::floor(fit.ci_lo * 0.9));
+            int hi = std::min(max_n,       (int)std::ceil (fit.ci_hi * 1.1));
+            cur_grid = bsda_log_grid(lo, hi, n_main);
+            if ((int)cur_grid.n_elem < 3) break;   // window collapsed --> stop, report last fit
+        } else {
+            break;   // fit not identified --> stop, report last fit (converged stays FALSE)
+        }
+    }
+
+    bool identified = (fit.n_nonsat >= 3) && std::isfinite(fit.n_star);
+    double duration = timer.toc();
+
+    // Return the full accumulated curve as main_*, sorted by n. This is a
+    // change from the previous behaviour (last grid only): main_n now holds
+    // every non-scout... in fact every point evaluated, scout included, which
+    // is the complete power curve the fit was built on.
+    arma::uword M = store_n.size();
+    arma::vec out_n(M), out_pow(M), out_se(M), out_meas(M);
+    for (arma::uword k = 0; k < M; ++k) {
+        out_n(k)    = (double)store_n[k];
+        out_pow(k)  = store_pow[k];
+        out_se(k)   = store_se[k];
+        out_meas(k) = store_meas[k];
+    }
+    arma::uvec ford = arma::sort_index(out_n);
+    out_n = out_n(ford); out_pow = out_pow(ford);
+    out_se = out_se(ford); out_meas = out_meas(ford);
+
+    return Rcpp::List::create(
+        Rcpp::Named("n_star")             = fit.n_star,
+        Rcpp::Named("ci_lo")              = fit.ci_lo,
+        Rcpp::Named("ci_hi")              = fit.ci_hi,
+        Rcpp::Named("direction")          = fit.direction,
+        Rcpp::Named("n_nonsat")           = fit.n_nonsat,
+        Rcpp::Named("boot_keep_frac")     = fit.keep_frac,
+        Rcpp::Named("direction_mismatch") = fit.mismatch,
+        Rcpp::Named("a")                  = fit.a,
+        Rcpp::Named("b")                  = fit.b,
+        Rcpp::Named("slope")              = fit.slope,
+        Rcpp::Named("main_n")             = out_n,
+        Rcpp::Named("main_power")         = out_pow,
+        Rcpp::Named("main_se")            = out_se,
+        Rcpp::Named("main_measure")       = out_meas,
+        Rcpp::Named("scout_n")            = scout.n,
+        Rcpp::Named("scout_power")        = scout.power,
+        Rcpp::Named("scout_measure")      = scout.meas,
+        Rcpp::Named("measure")            = measure,
+        Rcpp::Named("measure_value")      = measure_value,
+        Rcpp::Named("target_pow")         = target_pow,
+        Rcpp::Named("iterations")         = iter_counter,
+        Rcpp::Named("identified")         = identified,
+        Rcpp::Named("converged")          = converged,
+        Rcpp::Named("duration")           = duration);
 }

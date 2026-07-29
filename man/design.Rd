@@ -4,14 +4,14 @@
 \alias{design}
 \title{Sample-size planning}
 \usage{
-design(params, method = c("DPIR", "BFDA"), ...)
+design(params, method = c("DPIR", "BFDA", "BSDA"), ...)
 }
 \arguments{
 \item{params}{A \code{bgm_elicited} object, as returned by
 \code{\link{elicit_prior}}.}
 
-\item{method}{Which planning method to use, \code{"DPIR"} (default) or
-\code{"BFDA"}. One method runs per call.}
+\item{method}{Which planning method to use, \code{"DPIR"} (default), 
+\code{"BFDA"}, or \code{"BSDA"}. One method runs per call.}
 
 \item{...}{Method-specific arguments passed to the method (e.g.,
 \code{max_n}, the largest sample size considered in the planning).}
@@ -41,6 +41,7 @@ Methods are available for the following classes:
 }
 \seealso{
 Other sample size planning: 
+\code{\link{bsda_control}()},
 \code{\link{design.ggm_elicited}()},
 \code{\link{validate}()},
 \code{\link{validate.ggm_design}()}

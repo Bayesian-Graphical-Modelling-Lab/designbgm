@@ -1,4 +1,5 @@
 #include <string>
+#include <cmath>
 #include <RcppArmadillo.h>
 #include "prior_wishart.h"
 #include "prior_gwishart.h"
@@ -320,4 +321,307 @@ arma::mat prior_variance_gwishart(const arma::umat &G, const arma::uvec &select_
     arma::mat draws = S_flat.rows(free_lin).t();
 
     return arma::cov(draws, 1);
+}
+
+// [[Rcpp::export]]
+arma::mat cpp_constrain_precision_to_graph(const arma::mat& K,
+                                           const arma::umat& G,
+                                           double tol,
+                                           int itermax) {
+    arma::uword p = K.n_cols;
+    arma::field<arma::uvec> neighbors = find_neighbors(G);
+    arma::field<arma::uvec> idx = create_indices_excluding_i(p);
+    arma::vec beta_star_full(p, arma::fill::zeros);
+    return hastie_adaptation(K, p, idx, neighbors, tol, itermax, beta_star_full);
+}
+
+
+// =======================================================================================
+// G-Wishart posterior samplers - for both non informative and informative priors
+//      - Double Continuous-Time (DCT) BDMCMC sampler (all edges at once, 
+//                                   Rao-Blackwellized posterior inclusion probabilities)
+//      - Double Conditional Bayes Factor (DCBF) BDMCMC sampler (one edge at a iteration)
+// =======================================================================================
+
+// (log scale) Conditional Bayes factor term, eq.(6). Phi = chol(K_perm,"upper"); edge at
+// 0-based (p-2, p-1). U = permuted rate matrix (Dn for posterior, D0 for prior).
+static inline double cbf_logN(const arma::mat& Phi, const arma::mat& U, int p) {
+    const int a = p - 2, b = p - 1;
+    const double phi_aa = Phi(a, a);
+    const double u_bb = U(b, b);
+    const double u_ab = U(a, b);
+    double s = 0.0;
+    for (int l = 0; l < a; ++l) s += Phi(l, a) * Phi(l, b);
+    const double inner = phi_aa * u_ab / u_bb - s / phi_aa;
+    return std::log(phi_aa) + 0.5 * std::log(2.0 * M_PI / u_bb)
+         + 0.5 * u_bb * inner * inner;
+}
+
+// numerically-stable logistic sigmoid
+static inline double sigmoid(double x) {
+    return x >= 0.0 ? 1.0 / (1.0 + std::exp(-x))
+                    : std::exp(x) / (1.0 + std::exp(x));
+}
+
+// permutation placing (i,j) at the last two positions, others in original order
+static inline arma::uvec perm_last(int p, int i, int j) {
+    arma::uvec pm(p);
+    int idx = 0;
+    for (int k = 0; k < p; ++k) if (k != i && k != j) pm(idx++) = (arma::uword)k;
+    pm(p - 2) = (arma::uword)i;
+    pm(p - 1) = (arma::uword)j;
+    return pm;
+}
+
+// =============================================================================
+// Double Continuous-Time (DCT) BDMCMC — Hinne, Lenkoski, Heskes, van Gerven (2014)
+// Exact-exchange birth-death sampler for GGM structure + precision with an
+// informative (or non-informative) G-Wishart prior  K ~ W_G(nu, G0, K0/nu).
+//   delta0 = nu-p+1 ,  D0 = nu*K0^{-1} ,  Dn = D0 + n*Sigma.
+// Rates use the conditional Bayes factor N(.) (eq.6) + one auxiliary prior draw,
+// so no normalizing constants and no Monte-Carlo integrals are needed.
+// Reuses rgwishart (Lenkoski direct sampler) from the same file.
+// Slower but more stable than the DCBF at shorter iterations (provides Rao-Blackwellized 
+// posterior inclusion probabilities).
+// =============================================================================
+
+// Continuous time sampler for G-Wishart posterior with informative prior (or non-informative prior)
+bdmcmc_dct_result bdmcmc_dct_sampler(
+        const arma::mat D0,          // AK prior rate matrix
+        const arma::mat Dn,            // AK posterior rate matrix
+        const arma::mat scale_prior,    // = K0/nu   (auxiliary scale)
+        const arma::mat scale_post,      // posterior scale
+        int              n,            // new-data sample size
+        double           nu,           // prior degrees of freedom (elicited)
+        const arma::mat& prior_logodds,      // p x p prior edge-inclusion probs (m<l)
+        const arma::mat& G_start,      // p x p starting adjacency (symmetric 0/1)
+        int              n_iter,
+        int              n_burnin,
+        std::string      gwish_sampler,       // "direct" or "gibbs"
+        double           gwish_tol,
+        arma::uword      gwish_iter,
+        arma::uword      gwish_burnin)
+{
+    Rcpp::RNGScope scope;
+    const int p = (int)D0.n_rows;
+
+    const double nu0 = nu;                       // std-Wishart df of the prior
+    const double nun = nu + (double)n;           // std-Wishart df of the posterior
+    if (nu - p + 1.0 <= 0.0)
+        Rcpp::warning("nu must exceed p-1 for a proper prior.");
+
+    // These are computed outside the loop to avoid repeated inversions of the same matrices
+    // const arma::mat D0 = nu * arma::inv_sympd(K0);          // AK prior rate matrix
+    // const arma::mat Dn = D0 + (double)n * Sigma;            // AK posterior rate matrix
+    // const arma::mat scale_prior = arma::inv_sympd(D0);      // = K0/nu   (auxiliary scale)
+    // const arma::mat scale_post  = arma::inv_sympd(Dn);      // posterior scale
+
+    // g_prior was the matrix of prior edge-inclusion probabilities (m<l) from R, converted to log-odds here
+    // arma::mat prior_logodds(p, p, arma::fill::zeros);
+    // for (int i = 0; i < p; ++i)
+    //     for (int j = i + 1; j < p; ++j) {
+    //         double q = std::min(std::max(g_prior(i, j), 1e-12), 1.0 - 1e-12);
+    //         prior_logodds(i, j) = std::log(q / (1.0 - q));
+    //     }
+
+    arma::mat G = arma::max(G_start, G_start.t());  G.diag().zeros();
+    G.transform([](double v){ return v > 0.5 ? 1.0 : 0.0; });
+
+    // stable weighted accumulators
+    double    max_logw = -arma::datum::inf, w_sum = 0.0;
+    arma::mat pip(p, p, arma::fill::zeros), K_hat(p, p, arma::fill::zeros);
+
+    arma::mat log_rate(p, p, arma::fill::zeros);
+    arma::mat pip_rb(p, p, arma::fill::zeros); // Rao-Blackwellized posterior inclusion probabilities
+    arma::mat rb(p, p, arma::fill::zeros);
+
+    const int total = n_burnin + n_iter;
+
+    for (int iter = 0; iter < total; ++iter) { // (total cost = (n_burnin + n_iter) *  p*(p-1)/2 edges * cost of rgwishart)
+        //Rcpp::Rcout << "iter=" << iter + 1 << "/" << total << "  n=" << n << std::endl;
+        // posterior precision draw on the current graph
+        const arma::umat G_u = (G > 0.5);
+        arma::mat K = rgwishart((arma::uword)1, scale_post, nun, G_u, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, Rcpp::Nullable<arma::mat>()).slice(0);
+
+        // toggle rate for every edge (loop over all edges, with Rao-Blackwellized posterior inclusion probabilities)
+        double log_R_max = -arma::datum::inf;
+        for (int i = 0; i < p; ++i) {
+            for (int j = i + 1; j < p; ++j) {
+
+                const bool present = (G(i, j) > 0.5);
+                const arma::uvec pm = perm_last(p, i, j);
+
+                // current K (data side): N(K, Dn)
+                const arma::mat Phi   = arma::chol(K.submat(pm, pm), "upper");
+                const double    log_N_K   = cbf_logN(Phi, Dn.submat(pm, pm), p);
+
+                // toggled graph + auxiliary prior draw on it: N(K0, D0)
+                arma::mat Gt = G; Gt(i, j) = Gt(j, i) = present ? 0.0 : 1.0;
+                const arma::umat Gt_u = (Gt.submat(pm, pm) > 0.5);
+                const arma::mat K0aux = rgwishart((arma::uword)1, scale_prior.submat(pm, pm), nu0, Gt_u, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, Rcpp::Nullable<arma::mat>()).slice(0);
+                const arma::mat Phi0  = arma::chol(K0aux, "upper");
+                const double    log_N_K0  = cbf_logN(Phi0, D0.submat(pm, pm), p);
+
+                // rate (log scale); birth: N_K/N_K0 * theta/(1-theta), death inverts
+                double lr;
+                if (present)   // death event
+                    lr = (log_N_K0 - log_N_K) - prior_logodds(i, j);
+                else           // birth event
+                    lr = (log_N_K - log_N_K0) + prior_logodds(i, j);
+
+                log_rate(i, j) = lr;
+                rb(i, j) = rb(j, i) = present ? sigmoid(-lr) : sigmoid(lr);
+                if (lr > log_R_max) log_R_max = lr;
+            }
+        }
+
+        // total rate R, expected sojourn weight w = 1/R   (log-stable)
+        double sum_shift = 0.0;
+        for (int i = 0; i < p; ++i)
+            for (int j = i + 1; j < p; ++j)
+                sum_shift += std::exp(log_rate(i, j) - log_R_max);
+        const double logw = -(log_R_max + std::log(sum_shift));
+
+        // accumulate (numerically stable weighted average)
+        if (iter >= n_burnin) {
+            if (logw > max_logw) {
+                const double r = (max_logw == -arma::datum::inf) ? 0.0 : std::exp(max_logw - logw);
+                // multiply old accumulators by r, then add the new sample with weight 1.0
+                w_sum *= r; 
+                pip *= r; 
+                K_hat *= r; 
+                pip_rb *= r;
+                // update max_logw and add the new sample with weight 1.0
+                max_logw = logw;
+                w_sum += 1.0; 
+                pip += G; 
+                K_hat += K; 
+                pip_rb += rb;
+            } else {
+                const double ww = std::exp(logw - max_logw);
+                // add new sample with weight ww
+                w_sum += ww; 
+                pip += ww * G; 
+                K_hat += ww * K; 
+                pip_rb += ww * rb;
+            }
+        }
+
+        // pick the event  e* ~ rate / R  and toggle
+        double u = R::runif(0.0, 1.0) * sum_shift, acc = 0.0;
+        int ei = -1, ej = -1;
+        for (int i = 0; i < p && ei < 0; ++i)
+            for (int j = i + 1; j < p; ++j) {
+                acc += std::exp(log_rate(i, j) - log_R_max);
+                if (u <= acc) { 
+                    ei = i; 
+                    ej = j; 
+                    break; 
+                }
+            }
+        if (ei < 0) { 
+            ei = 0; 
+            ej = 1; 
+        }
+        const double nv = (G(ei, ej) > 0.5) ? 0.0 : 1.0;
+        G(ei, ej) = nv; 
+        G(ej, ei) = nv;
+    }
+
+    if (w_sum > 0.0) { 
+        pip /= w_sum; 
+        K_hat /= w_sum; 
+        pip_rb /= w_sum;
+    }
+    pip.diag().ones();
+    pip_rb.diag().ones();   
+
+    // return results as a struct
+    bdmcmc_dct_result result;
+    result.pip = pip;
+    result.pip_rb = pip_rb;
+    result.K_hat = K_hat;
+    result.last_graph = G;
+
+    return result;
+}
+
+// Double Conditional Bayes Factor sampler (faster but slower convergence, requires more iterations) - This is a Metropolis-Hastings sampler (discrete time)
+bdmcmc_dcbf_result bdmcmc_dcbf_sampler(int n, 
+                                        double nu,
+                                        const arma::mat &D0, 
+                                        const arma::mat &Dn, // D0 = nu*K0^{-1}, Dn = D0 + n*Sigma
+                                        const arma::mat &scale_prior, 
+                                        const arma::mat &scale_post, // scale_prior = inv(D0), scale_post = inv(Dn)
+                                        const arma::mat& plo, 
+                                        const arma::mat& G_start, 
+                                        int n_iter, 
+                                        int n_burnin,
+                                        std::string gwish_sampler,
+                                        double gwish_tol, 
+                                        arma::uword gwish_iter,
+                                        arma::uword gwish_burnin)                                       
+{
+    Rcpp::RNGScope scope;
+    const int p = (int)D0.n_rows;
+    const double nu0 = nu, nun = nu + (double)n;
+    if (nu - p + 1.0 <= 0.0) Rcpp::warning("nu must exceed p-1 for a proper prior.");
+
+    arma::umat G = (G_start > 0.5);
+
+    const int M = p * (p - 1) / 2;
+    double    w_sum = 0.0; long accepts = 0;
+    arma::mat pip(p, p, arma::fill::zeros), K_hat(p, p, arma::fill::zeros);
+    const int total = n_burnin + n_iter;
+
+    for (int iter = 0; iter < total; ++iter) { // (total cost = (n_burnin + n_iter) * one edge * cost of rgwishart)
+
+        // Gibbs: posterior precision on the current graph
+        arma::mat K = rgwishart((arma::uword)1, scale_post, nun, G, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, Rcpp::Nullable<arma::mat>()).slice(0);
+
+        // Record the consistent (G, K) pair  (equal weights — it's Metropolis)
+        if (iter >= n_burnin) { w_sum += 1.0; pip += arma::conv_to<arma::mat>::from(G); K_hat += K; }
+        
+        // Propose one uniformly chosen edge among the M pairs (one edge at a time - possibly slow convergence)
+        int k = (int)std::floor(R::runif(0.0, (double)M)); if (k >= M) k = M - 1;
+        int i = 0, rem = k;
+        while (rem >= p - 1 - i) { rem -= (p - 1 - i); ++i; }
+        const int j = i + 1 + rem;
+
+        const bool       present = (G(i, j) > 0.5);
+        const arma::uvec pm      = perm_last(p, i, j);
+
+        const double logN_K = cbf_logN(arma::chol(K.submat(pm, pm), "upper"),
+                                       Dn.submat(pm, pm), p);
+
+        arma::umat Gt = G; Gt(i, j) = Gt(j, i) = present ? 0 : 1;
+        const arma::mat K0aux = rgwishart((arma::uword)1, scale_prior.submat(pm, pm),
+                                          nu0, Gt.submat(pm, pm),
+                                          gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, Rcpp::Nullable<arma::mat>()).slice(0); 
+        const double logN_K0 = cbf_logN(arma::chol(K0aux, "upper"),
+                                        D0.submat(pm, pm), p);
+
+        // Exchange CBF acceptance (eq.7); symmetric proposal --> no q ratio
+        const double log_alpha = present
+            ? (logN_K0 - logN_K - plo(i, j))     // death event
+            : (logN_K  - logN_K0 + plo(i, j));   // birth event
+
+        if (std::log(R::runif(0.0, 1.0)) < log_alpha) {
+            G(i, j) = G(j, i) = present ? 0 : 1;
+            ++accepts;
+        }
+        
+    }
+
+    pip /= w_sum; 
+    pip.diag().ones();
+    K_hat /= w_sum; 
+   
+    bdmcmc_dcbf_result result;
+    result.pip = pip;
+    result.K_hat = K_hat;
+    result.last_graph = G;
+    result.accept_rate = (double)accepts / (double)total;
+
+    return result;
 }

@@ -12,8 +12,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // cpp_design_dpir
-Rcpp::List cpp_design_dpir(const std::string& prior, const arma::mat& K, const arma::uword& nu, const arma::umat& G, const arma::uword& H, const arma::uword& J, arma::uvec& n, const double& threshold, const bool optimize, const double& target_probability, const arma::uword& n_tol, const arma::uword& max_n);
-RcppExport SEXP _designbgm_cpp_design_dpir(SEXP priorSEXP, SEXP KSEXP, SEXP nuSEXP, SEXP GSEXP, SEXP HSEXP, SEXP JSEXP, SEXP nSEXP, SEXP thresholdSEXP, SEXP optimizeSEXP, SEXP target_probabilitySEXP, SEXP n_tolSEXP, SEXP max_nSEXP) {
+Rcpp::List cpp_design_dpir(const std::string& prior, const arma::mat& K, const arma::uword& nu, const arma::umat& G, const arma::uword& H, const arma::uword& J, arma::uvec& n, const double& threshold, const bool optimize, const double& target_probability, const arma::uword& n_tol, const arma::uword& max_n, const std::string& gwish_sampler, const double& gwish_tol, const int& gwish_iter, const int& gwish_burnin);
+RcppExport SEXP _designbgm_cpp_design_dpir(SEXP priorSEXP, SEXP KSEXP, SEXP nuSEXP, SEXP GSEXP, SEXP HSEXP, SEXP JSEXP, SEXP nSEXP, SEXP thresholdSEXP, SEXP optimizeSEXP, SEXP target_probabilitySEXP, SEXP n_tolSEXP, SEXP max_nSEXP, SEXP gwish_samplerSEXP, SEXP gwish_tolSEXP, SEXP gwish_iterSEXP, SEXP gwish_burninSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -29,13 +29,17 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double& >::type target_probability(target_probabilitySEXP);
     Rcpp::traits::input_parameter< const arma::uword& >::type n_tol(n_tolSEXP);
     Rcpp::traits::input_parameter< const arma::uword& >::type max_n(max_nSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_design_dpir(prior, K, nu, G, H, J, n, threshold, optimize, target_probability, n_tol, max_n));
+    Rcpp::traits::input_parameter< const std::string& >::type gwish_sampler(gwish_samplerSEXP);
+    Rcpp::traits::input_parameter< const double& >::type gwish_tol(gwish_tolSEXP);
+    Rcpp::traits::input_parameter< const int& >::type gwish_iter(gwish_iterSEXP);
+    Rcpp::traits::input_parameter< const int& >::type gwish_burnin(gwish_burninSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_design_dpir(prior, K, nu, G, H, J, n, threshold, optimize, target_probability, n_tol, max_n, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_design_bfda_edge_dense
-Rcpp::List cpp_design_bfda_edge_dense(const arma::mat& K, const arma::uword& nu, arma::umat& G, const arma::uword& m, const arma::uword& l, const arma::uword& H, const arma::uword& J, arma::uvec& n, const double& pow0, const double& pow1, const double& threshold, const bool optimize, const arma::uword& n_tol, const arma::uword& max_n);
-RcppExport SEXP _designbgm_cpp_design_bfda_edge_dense(SEXP KSEXP, SEXP nuSEXP, SEXP GSEXP, SEXP mSEXP, SEXP lSEXP, SEXP HSEXP, SEXP JSEXP, SEXP nSEXP, SEXP pow0SEXP, SEXP pow1SEXP, SEXP thresholdSEXP, SEXP optimizeSEXP, SEXP n_tolSEXP, SEXP max_nSEXP) {
+Rcpp::List cpp_design_bfda_edge_dense(const arma::mat& K, const arma::uword& nu, arma::umat& G, const arma::uword& m, const arma::uword& l, const arma::uword& H, const arma::uword& J, arma::uvec& n, const double& pow0, const double& pow1, const double& threshold, const bool optimize, const arma::uword& n_tol, const arma::uword& max_n, const std::string& gwish_sampler, const double& gwish_tol, const arma::uword& gwish_iter, const arma::uword& gwish_burnin);
+RcppExport SEXP _designbgm_cpp_design_bfda_edge_dense(SEXP KSEXP, SEXP nuSEXP, SEXP GSEXP, SEXP mSEXP, SEXP lSEXP, SEXP HSEXP, SEXP JSEXP, SEXP nSEXP, SEXP pow0SEXP, SEXP pow1SEXP, SEXP thresholdSEXP, SEXP optimizeSEXP, SEXP n_tolSEXP, SEXP max_nSEXP, SEXP gwish_samplerSEXP, SEXP gwish_tolSEXP, SEXP gwish_iterSEXP, SEXP gwish_burninSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -53,7 +57,11 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const bool >::type optimize(optimizeSEXP);
     Rcpp::traits::input_parameter< const arma::uword& >::type n_tol(n_tolSEXP);
     Rcpp::traits::input_parameter< const arma::uword& >::type max_n(max_nSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_design_bfda_edge_dense(K, nu, G, m, l, H, J, n, pow0, pow1, threshold, optimize, n_tol, max_n));
+    Rcpp::traits::input_parameter< const std::string& >::type gwish_sampler(gwish_samplerSEXP);
+    Rcpp::traits::input_parameter< const double& >::type gwish_tol(gwish_tolSEXP);
+    Rcpp::traits::input_parameter< const arma::uword& >::type gwish_iter(gwish_iterSEXP);
+    Rcpp::traits::input_parameter< const arma::uword& >::type gwish_burnin(gwish_burninSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_design_bfda_edge_dense(K, nu, G, m, l, H, J, n, pow0, pow1, threshold, optimize, n_tol, max_n, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -82,8 +90,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_design_bfda_edge_sparse
-Rcpp::List cpp_design_bfda_edge_sparse(const arma::mat& K, const arma::uword& nu, arma::umat& G, const arma::imat& G_upper, const arma::ivec& n_vec, const arma::mat& Rho, const arma::uword& m, const arma::uword& l, const arma::uword& H, const arma::uword& J, arma::uvec& n, const double& pow0, const double& pow1, const double& threshold, const bool optimize, const int nsim_bf, const arma::uword& n_tol, const arma::uword& max_n);
-RcppExport SEXP _designbgm_cpp_design_bfda_edge_sparse(SEXP KSEXP, SEXP nuSEXP, SEXP GSEXP, SEXP G_upperSEXP, SEXP n_vecSEXP, SEXP RhoSEXP, SEXP mSEXP, SEXP lSEXP, SEXP HSEXP, SEXP JSEXP, SEXP nSEXP, SEXP pow0SEXP, SEXP pow1SEXP, SEXP thresholdSEXP, SEXP optimizeSEXP, SEXP nsim_bfSEXP, SEXP n_tolSEXP, SEXP max_nSEXP) {
+Rcpp::List cpp_design_bfda_edge_sparse(const arma::mat& K, const arma::uword& nu, arma::umat& G, const arma::imat& G_upper, const arma::ivec& n_vec, const arma::mat& Rho, const arma::uword& m, const arma::uword& l, const arma::uword& H, const arma::uword& J, arma::uvec& n, const double& pow0, const double& pow1, const double& threshold, const bool optimize, const int nsim_bf, const arma::uword& n_tol, const arma::uword& max_n, const std::string& gwish_sampler, const double& gwish_tol, const arma::uword& gwish_iter, const arma::uword& gwish_burnin);
+RcppExport SEXP _designbgm_cpp_design_bfda_edge_sparse(SEXP KSEXP, SEXP nuSEXP, SEXP GSEXP, SEXP G_upperSEXP, SEXP n_vecSEXP, SEXP RhoSEXP, SEXP mSEXP, SEXP lSEXP, SEXP HSEXP, SEXP JSEXP, SEXP nSEXP, SEXP pow0SEXP, SEXP pow1SEXP, SEXP thresholdSEXP, SEXP optimizeSEXP, SEXP nsim_bfSEXP, SEXP n_tolSEXP, SEXP max_nSEXP, SEXP gwish_samplerSEXP, SEXP gwish_tolSEXP, SEXP gwish_iterSEXP, SEXP gwish_burninSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -105,7 +113,82 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const int >::type nsim_bf(nsim_bfSEXP);
     Rcpp::traits::input_parameter< const arma::uword& >::type n_tol(n_tolSEXP);
     Rcpp::traits::input_parameter< const arma::uword& >::type max_n(max_nSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_design_bfda_edge_sparse(K, nu, G, G_upper, n_vec, Rho, m, l, H, J, n, pow0, pow1, threshold, optimize, nsim_bf, n_tol, max_n));
+    Rcpp::traits::input_parameter< const std::string& >::type gwish_sampler(gwish_samplerSEXP);
+    Rcpp::traits::input_parameter< const double& >::type gwish_tol(gwish_tolSEXP);
+    Rcpp::traits::input_parameter< const arma::uword& >::type gwish_iter(gwish_iterSEXP);
+    Rcpp::traits::input_parameter< const arma::uword& >::type gwish_burnin(gwish_burninSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_design_bfda_edge_sparse(K, nu, G, G_upper, n_vec, Rho, m, l, H, J, n, pow0, pow1, threshold, optimize, nsim_bf, n_tol, max_n, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin));
+    return rcpp_result_gen;
+END_RCPP
+}
+// power_at_n
+Rcpp::List power_at_n(const arma::mat& K, const arma::mat& G, const arma::mat& pip, int p, int n, int H, int J, int nu, std::string gwish_sampler, double gwish_tol, arma::uword gwish_iter, arma::uword gwish_burnin, double edge_selection_threshold, std::string measure, double measure_value, std::string init, int fit_iterations, int fit_burnin, double alpha, Rcpp::Nullable<int> seed);
+RcppExport SEXP _designbgm_power_at_n(SEXP KSEXP, SEXP GSEXP, SEXP pipSEXP, SEXP pSEXP, SEXP nSEXP, SEXP HSEXP, SEXP JSEXP, SEXP nuSEXP, SEXP gwish_samplerSEXP, SEXP gwish_tolSEXP, SEXP gwish_iterSEXP, SEXP gwish_burninSEXP, SEXP edge_selection_thresholdSEXP, SEXP measureSEXP, SEXP measure_valueSEXP, SEXP initSEXP, SEXP fit_iterationsSEXP, SEXP fit_burninSEXP, SEXP alphaSEXP, SEXP seedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type K(KSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type G(GSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type pip(pipSEXP);
+    Rcpp::traits::input_parameter< int >::type p(pSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type H(HSEXP);
+    Rcpp::traits::input_parameter< int >::type J(JSEXP);
+    Rcpp::traits::input_parameter< int >::type nu(nuSEXP);
+    Rcpp::traits::input_parameter< std::string >::type gwish_sampler(gwish_samplerSEXP);
+    Rcpp::traits::input_parameter< double >::type gwish_tol(gwish_tolSEXP);
+    Rcpp::traits::input_parameter< arma::uword >::type gwish_iter(gwish_iterSEXP);
+    Rcpp::traits::input_parameter< arma::uword >::type gwish_burnin(gwish_burninSEXP);
+    Rcpp::traits::input_parameter< double >::type edge_selection_threshold(edge_selection_thresholdSEXP);
+    Rcpp::traits::input_parameter< std::string >::type measure(measureSEXP);
+    Rcpp::traits::input_parameter< double >::type measure_value(measure_valueSEXP);
+    Rcpp::traits::input_parameter< std::string >::type init(initSEXP);
+    Rcpp::traits::input_parameter< int >::type fit_iterations(fit_iterationsSEXP);
+    Rcpp::traits::input_parameter< int >::type fit_burnin(fit_burninSEXP);
+    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<int> >::type seed(seedSEXP);
+    rcpp_result_gen = Rcpp::wrap(power_at_n(K, G, pip, p, n, H, J, nu, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, edge_selection_threshold, measure, measure_value, init, fit_iterations, fit_burnin, alpha, seed));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_bsda_probit
+Rcpp::List cpp_bsda_probit(const arma::mat& K, const arma::mat& G, const arma::mat& pip, int p, int nu, std::string measure, double measure_value, double target_pow, int range_lower, int max_n, int n_scout, int n_main, int H, int H_scout, int J, double scout_frac, std::string gwish_sampler, double gwish_tol, arma::uword gwish_iter, arma::uword gwish_burnin, double edge_selection_threshold, std::string init, int fit_iterations, int fit_burnin, double alpha, int n_boot, double eps, int tol, double tol_frac, int max_iter, bool verbose);
+RcppExport SEXP _designbgm_cpp_bsda_probit(SEXP KSEXP, SEXP GSEXP, SEXP pipSEXP, SEXP pSEXP, SEXP nuSEXP, SEXP measureSEXP, SEXP measure_valueSEXP, SEXP target_powSEXP, SEXP range_lowerSEXP, SEXP max_nSEXP, SEXP n_scoutSEXP, SEXP n_mainSEXP, SEXP HSEXP, SEXP H_scoutSEXP, SEXP JSEXP, SEXP scout_fracSEXP, SEXP gwish_samplerSEXP, SEXP gwish_tolSEXP, SEXP gwish_iterSEXP, SEXP gwish_burninSEXP, SEXP edge_selection_thresholdSEXP, SEXP initSEXP, SEXP fit_iterationsSEXP, SEXP fit_burninSEXP, SEXP alphaSEXP, SEXP n_bootSEXP, SEXP epsSEXP, SEXP tolSEXP, SEXP tol_fracSEXP, SEXP max_iterSEXP, SEXP verboseSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type K(KSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type G(GSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type pip(pipSEXP);
+    Rcpp::traits::input_parameter< int >::type p(pSEXP);
+    Rcpp::traits::input_parameter< int >::type nu(nuSEXP);
+    Rcpp::traits::input_parameter< std::string >::type measure(measureSEXP);
+    Rcpp::traits::input_parameter< double >::type measure_value(measure_valueSEXP);
+    Rcpp::traits::input_parameter< double >::type target_pow(target_powSEXP);
+    Rcpp::traits::input_parameter< int >::type range_lower(range_lowerSEXP);
+    Rcpp::traits::input_parameter< int >::type max_n(max_nSEXP);
+    Rcpp::traits::input_parameter< int >::type n_scout(n_scoutSEXP);
+    Rcpp::traits::input_parameter< int >::type n_main(n_mainSEXP);
+    Rcpp::traits::input_parameter< int >::type H(HSEXP);
+    Rcpp::traits::input_parameter< int >::type H_scout(H_scoutSEXP);
+    Rcpp::traits::input_parameter< int >::type J(JSEXP);
+    Rcpp::traits::input_parameter< double >::type scout_frac(scout_fracSEXP);
+    Rcpp::traits::input_parameter< std::string >::type gwish_sampler(gwish_samplerSEXP);
+    Rcpp::traits::input_parameter< double >::type gwish_tol(gwish_tolSEXP);
+    Rcpp::traits::input_parameter< arma::uword >::type gwish_iter(gwish_iterSEXP);
+    Rcpp::traits::input_parameter< arma::uword >::type gwish_burnin(gwish_burninSEXP);
+    Rcpp::traits::input_parameter< double >::type edge_selection_threshold(edge_selection_thresholdSEXP);
+    Rcpp::traits::input_parameter< std::string >::type init(initSEXP);
+    Rcpp::traits::input_parameter< int >::type fit_iterations(fit_iterationsSEXP);
+    Rcpp::traits::input_parameter< int >::type fit_burnin(fit_burninSEXP);
+    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< int >::type n_boot(n_bootSEXP);
+    Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
+    Rcpp::traits::input_parameter< int >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< double >::type tol_frac(tol_fracSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_bsda_probit(K, G, pip, p, nu, measure, measure_value, target_pow, range_lower, max_n, n_scout, n_main, H, H_scout, J, scout_frac, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, edge_selection_threshold, init, fit_iterations, fit_burnin, alpha, n_boot, eps, tol, tol_frac, max_iter, verbose));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -157,16 +240,33 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_constrain_precision_to_graph
+arma::mat cpp_constrain_precision_to_graph(const arma::mat& K, const arma::umat& G, double tol, int itermax);
+RcppExport SEXP _designbgm_cpp_constrain_precision_to_graph(SEXP KSEXP, SEXP GSEXP, SEXP tolSEXP, SEXP itermaxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type K(KSEXP);
+    Rcpp::traits::input_parameter< const arma::umat& >::type G(GSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< int >::type itermax(itermaxSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_constrain_precision_to_graph(K, G, tol, itermax));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_designbgm_cpp_design_dpir", (DL_FUNC) &_designbgm_cpp_design_dpir, 12},
-    {"_designbgm_cpp_design_bfda_edge_dense", (DL_FUNC) &_designbgm_cpp_design_bfda_edge_dense, 14},
+    {"_designbgm_cpp_design_dpir", (DL_FUNC) &_designbgm_cpp_design_dpir, 16},
+    {"_designbgm_cpp_design_bfda_edge_dense", (DL_FUNC) &_designbgm_cpp_design_bfda_edge_dense, 18},
     {"_designbgm_cpp_G_upper", (DL_FUNC) &_designbgm_cpp_G_upper, 2},
     {"_designbgm_cpp_n_vec", (DL_FUNC) &_designbgm_cpp_n_vec, 2},
-    {"_designbgm_cpp_design_bfda_edge_sparse", (DL_FUNC) &_designbgm_cpp_design_bfda_edge_sparse, 18},
+    {"_designbgm_cpp_design_bfda_edge_sparse", (DL_FUNC) &_designbgm_cpp_design_bfda_edge_sparse, 22},
+    {"_designbgm_power_at_n", (DL_FUNC) &_designbgm_power_at_n, 20},
+    {"_designbgm_cpp_bsda_probit", (DL_FUNC) &_designbgm_cpp_bsda_probit, 31},
     {"_designbgm_cpp_ggm_prior_ess_vr_pr", (DL_FUNC) &_designbgm_cpp_ggm_prior_ess_vr_pr, 13},
     {"_designbgm_cpp_precision_to_partial_correlations", (DL_FUNC) &_designbgm_cpp_precision_to_partial_correlations, 1},
     {"_designbgm_cpp_simulate_ggm_study_precision", (DL_FUNC) &_designbgm_cpp_simulate_ggm_study_precision, 4},
+    {"_designbgm_cpp_constrain_precision_to_graph", (DL_FUNC) &_designbgm_cpp_constrain_precision_to_graph, 4},
     {NULL, NULL, 0}
 };
 

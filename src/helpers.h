@@ -43,4 +43,7 @@ double global_ess(const arma::mat &X, const arma::mat &Z, const std::string &agg
 // Parameter-wise ESS
 arma::vec parameterwise_ess(const arma::mat &X, const arma::mat &Z);  
 
+// Find quantile of a vector (arma::vec) at a given probability level
+double arma_quantile(const arma::vec &v, double pr);
+
 #endif 

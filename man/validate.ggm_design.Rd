@@ -4,7 +4,15 @@
 \alias{validate.ggm_design}
 \title{Validate a sample-size plan for a Gaussian graphical model}
 \usage{
-\method{validate}{ggm_design}(plan, H = 500L, J = 100L, which_n = NULL, scope = NULL, ...)
+\method{validate}{ggm_design}(
+  plan,
+  H = 500L,
+  J = 100L,
+  which_n = NULL,
+  scope = NULL,
+  seed = NULL,
+  ...
+)
 }
 \arguments{
 \item{plan}{A \code{ggm_design} object, as returned by \code{\link{design}}.
@@ -17,12 +25,14 @@ defaults, since the check is run at a single \code{n}.}
 \item{which_n}{Which of the plan's recommended sizes to validate at.
 \code{NULL} (default) picks \code{"global"} for a DPIR plan and
 \code{"h1"} for a BFDA plan. DPIR plans also accept \code{"pw"}, the
-parameterwise size; BFDA plans also accept \code{"h0"}.}
+parameterwise size; BFDA plans also accept \code{"h0"}; BSDA plans have only one size.}
 
 \item{scope}{BFDA only: whether to check the edge the plan was built
 around (\code{"planning_edge"}) or every present edge in the graph
 (\code{"all_edges"}), the stricter guarantee check. \code{NULL} (default) means
 \code{"planning_edge"}. This argument is ignored for DPIR plans.}
+
+\item{seed}{Random seed for reproducibility.}
 
 \item{...}{Ignored, present for consistency with the generic.}
 }
@@ -40,6 +50,7 @@ Checks a design plan by simulating studies at the recommended \code{n}
 }
 \seealso{
 Other sample size planning: 
+\code{\link{bsda_control}()},
 \code{\link{design}()},
 \code{\link{design.ggm_elicited}()},
 \code{\link{validate}()}

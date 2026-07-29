@@ -21,7 +21,11 @@ arma::mat random_precision_from_prior(const std::string& prior,
                                         const arma::mat& K,  
                                         const int& nu,
                                         const arma::umat& G, 
-                                        const arma::mat& Kchol);
+                                        const arma::mat& Kchol,
+                                        const std::string& gwish_sampler = "direct",
+                                        const double& gwish_tol = 1e-08,
+                                        const arma::uword& gwish_iter = 500,
+                                        const arma::uword& gwish_burnin = 500);
 
 // Simulate a random GGM study precision matrix with structure G
 arma::mat cpp_simulate_ggm_study_precision(const int&p, 

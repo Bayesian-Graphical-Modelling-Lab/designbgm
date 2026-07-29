@@ -1,3 +1,24 @@
+# designbgm 0.3.0
+
+## New features
+
+* New planning method `"BSDA"` (Bayesian structural design analysis) in
+  `design()`. It recommends a sample size at which edge selection reaches a
+  target sensitivity or specificity with a given power, using the probit inversion
+  of a simulated power curve.
+* `ggm_parameters()` gains a `pip` argument (prior inclusion probabilities),
+  supplied as a single probability or a matrix. Required by BSDA and carried
+  through `elicit_prior()`.
+* `bsda_control()` is an helper control list where the user can specify:
+  the sampler, model-fit, and search settings for BSDA planning.
+* `validate()` now supports BSDA plans, reporting the achieved power at the
+  recommended sample size with a confidence interval.
+
+## Minor improvements
+
+* `print()` methods for `ggm_parameters` and `ggm_elicited` now display the
+  prior inclusion probabilities (range) when supplied.
+
 # designbgm 0.2.0
 
 ## New features

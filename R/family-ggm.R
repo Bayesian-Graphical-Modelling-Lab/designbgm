@@ -27,19 +27,29 @@
 #' @return A \eqn{p \times p} precision matrix with zeros at the non-edges of \code{G}.
 #' @export
 constrain_precision_to_graph <- function(K, G, tol = 1e-6, itermax = 1000) {
-  p <- ncol(K)
-  neighbors <- find_neighbors(G)                      
-  idx       <- create_indices_excluding_i(p = p)
-  return(hastie_adaptation(K = K, p = p,
-                    indices_excluding_i = idx,
-                    neighbors = neighbors,
-                    tol = tol, itermax = itermax,
-                    beta_star_full = rep(0, p)))
+  K <- as.matrix(K)
+  G <- as.matrix(G)
+  if (nrow(K) != ncol(K)) stop("`K` must be square.")
+  if (!all(dim(K) == dim(G))) stop("`K` and `G` must have the same dimensions.")
+  if (!isSymmetric(K, tol = tol)) stop("`K` must be symmetric.")
+  if (inherits(try(chol(K), silent = TRUE), "try-error"))
+    stop("`K` must be positive definite (Cholesky factorisation failed).")
+  return(cpp_constrain_precision_to_graph(K = K, G = G, tol = tol, itermax = itermax))
 }
 
 ###############################################################################
 #                             GGM parameters (user input)                     #
 ###############################################################################
+
+#' @noRd
+.format_pip <- function(pip) {
+  if (is.null(pip)) return(invisible(NULL))
+  ut <- pip[upper.tri(pip)]
+  if (length(unique(ut)) == 1L)
+    cat("  pip   :", ut[1], "(constant)\n")
+  else
+    cat(sprintf("  pip   : matrix, range [%.3f, %.3f]\n", min(ut), max(ut)))
+}
 
 #' @title Construct GGM prior parameters
 #' @description Takes the inputs for a Gaussian graphical model and bundles them into
@@ -50,9 +60,11 @@ constrain_precision_to_graph <- function(K, G, tol = 1e-6, itermax = 1000) {
 #' @param mu Mean vector of length \code{p}. The default \code{NULL} corresponds
 #'   to the centered (zero-mean) case that all current methods assume. Supplying
 #'   a non-\code{NULL} \code{mu} is not yet supported.
+#' @param pip Prior inclusion probabilities. The default \code{NULL} corresponds to the uniform prior. 
+#'   Can be a single probability or a \code{p} by \code{p} symmetric matrix with zero diagonal.
 #' @return A \code{ggm_parameters} object, which also inherits from \code{bgm_parameters}.
 #' @export
-ggm_parameters <- function(K, G, nu, mu = NULL) {
+ggm_parameters <- function(K, G, nu, mu = NULL,  pip = NULL) {
   K <- unname(as.matrix(K))
   G <- unname(as.matrix(G))
   p <- nrow(K)
@@ -92,7 +104,37 @@ ggm_parameters <- function(K, G, nu, mu = NULL) {
     stop("'nu' must be an integer (prior study size / degrees of freedom).", call. = FALSE)
   }
   nu <- as.integer(round(nu))
-  return(new_bgm_parameters("ggm", list(K = K, G = G, nu = nu, mu = mu))) # family name + list of family elements
+
+  if (!is.null(pip)) { # [NOTE] pip is either a single probability or a p x p matrix. If a matrix, it can be either upper-triangular or symmetric. If upper-triangular, it is mirrored to a full symmetric matrix. The diagonal is set to zero. All entries must lie in [0, 1].
+    if (is.matrix(pip)) {
+      pip <- unname(as.matrix(pip))
+      stopifnot(nrow(pip) == p, ncol(pip) == p)
+
+      lower <- pip[lower.tri(pip)]
+      upper <- pip[upper.tri(pip)]
+
+      if (all(lower == 0) && any(upper != 0)) {
+        # upper-triangular form: mirror it into a full symmetric matrix
+        pip[lower.tri(pip)] <- t(pip)[lower.tri(pip)]
+      } else if (!isSymmetric(pip)) {
+        stop("'pip' must be symmetric, or have only its upper triangle filled.",
+            call. = FALSE)
+      }
+
+      diag(pip) <- 0
+      if (any(pip < 0 | pip > 1))
+        stop("'pip' entries must lie in [0, 1].", call. = FALSE)
+
+    } else if (is.numeric(pip) && length(pip) == 1L) {
+      if (pip < 0 || pip > 1) stop("'pip' must lie in [0, 1].", call. = FALSE)
+      pip <- matrix(pip, p, p)
+      diag(pip) <- 0
+    } else {
+      stop("'pip' must be a single probability or a p x p matrix.", call. = FALSE)
+    }
+  }
+
+  return(new_bgm_parameters("ggm", list(K = K, G = G, nu = nu, mu = mu, pip = pip))) # family name + list of family elements
 }
 
 #' @export
@@ -102,6 +144,7 @@ print.ggm_parameters <- function(x, ...) {
   cat("  nodes :", p, "\n")
   cat("  edges :", sum(x$G[upper.tri(x$G)]), "of", choose(p, 2), "\n")
   cat("  nu    :", x$nu, " (prior study size)\n")
+  .format_pip(x$pip)
   invisible(x)
 }
 
@@ -152,7 +195,8 @@ elicit_prior.ggm_parameters <- function(params, prior = NULL, ...) {
     G      = G,
     p      = p,
     sparse = sparse,
-    prior  = prior     
+    prior  = prior,
+    pip    = params$pip                     # NULL unless supplied     
   )))
 }
 
@@ -162,6 +206,7 @@ print.ggm_elicited <- function(x, ...) {
   cat("  nodes :", x$p, "\n")
   cat("  edges :", sum(x$G[upper.tri(x$G)]), "of", choose(x$p, 2), "\n")
   cat("  nu    :", x$nu, " (prior study size)\n")
+  .format_pip(x$pip)
   invisible(x)
 }
 
@@ -365,23 +410,81 @@ prior_ess.ggm_elicited <- function(params,
               n_edges_considered = nrow(edges_k)))
 }
 
+#' @title Control parameters for BSDA sample-size planning
+#' @description Lists the sampler, model-fit, and search-algorithm settings
+#'   for \code{design(method = "BSDA")} and its validation. These are the
+#'   deeper knobs a user rarely changes; the planning targets (\code{measure},
+#'   \code{measure_value}, \code{target_pow}) stay in \code{\link{design}}'s own
+#'   arguments.
+#' @param gwish_sampler G-Wishart sampler, \code{"direct"} or \code{"block"}.
+#' @param gwish_tol,gwish_iter,gwish_burnin Tolerance, iterations, and burn-in
+#'   for the G-Wishart sampler.
+#' @param edge_threshold Posterior inclusion probability above which an edge is
+#'   selected. Default 0.5.
+#' @param fit_iterations,fit_burnin MCMC length and burn-in for fitting each
+#'   simulated study.
+#' @param alpha Significance level used in the fit. Default 0.05.
+#' @param n_scout,n_main Grid sizes for the scout and main search passes.
+#' @param scout_frac Fraction of \code{fit_iterations} used in the scout pass.
+#' @param max_iter Maximum refine-evaluate-invert iterations.
+#' @param n_boot Bootstrap resamples for the probit-inversion CI.
+#' @param eps Numerical tolerance guarding the probit inversion.
+#' @param tol_frac Tolerance fraction of the relative sample size difference 
+#'   used to stop the search. Default 0.01, matched to typical H = 50. 
+#'   Lower it if H raises substantially.
+#' @param verbose Stream progress from the C++ routine. Default \code{FALSE}.
+#' @return A named list of control settings.
+#' @family sample size planning
+#' @export
+bsda_control <- function(gwish_sampler  = "direct",
+                         gwish_tol      = 1e-08,
+                         gwish_iter     = 500L,
+                         gwish_burnin   = 500L,
+                         edge_threshold = 0.5,
+                         fit_iterations = 10000L,
+                         fit_burnin     = 5000L,
+                         alpha          = 0.05,
+                         n_scout        = 6L,
+                         n_main         = 10L,
+                         scout_frac     = 1/3,
+                         max_iter       = 10L,
+                         n_boot         = 5000L,
+                         eps            = 1e-3,
+                         tol_frac       = 0.01,
+                         verbose        = FALSE) {
+  gwish_sampler <- match.arg(gwish_sampler, c("direct", "block"))
+  stopifnot(gwish_iter >= 1, fit_iterations >= 1, fit_burnin >= 0,
+          alpha > 0, alpha < 1, n_boot >= 1,
+          edge_threshold >= 0, edge_threshold <= 1,
+          scout_frac > 0, scout_frac <= 1)
+  structure(as.list(environment()), class = "bsda_control")
+}
+
 #' @title Sample-size planning for a Gaussian graphical model
 #' @description Recommends a sample size for a prospective Gaussian graphical
 #'   model study, given a prior elicited from a previous one. \code{"DPIR"}
 #'   returns two sizes, one for the graph as a whole and one at the parameterwise
 #'   level (considering only the off-diagonal elements). \code{"BFDA"} returns 
-#'   one per hypothesis: under the null (edge absent) and under the alternative (edge present).
+#'   one per hypothesis: under the null (edge absent) and under the alternative (edge present). 
+#'   \code{"BSDA"} returns a single size at which edge selection reaches a target 
+#'   sensitivity or specificity with a given power.
 #' @param params A \code{ggm_elicited} object, as returned by \code{\link{elicit_prior}}. 
 #'               It also inherits from \code{bgm_elicited}.
-#' @param method Which planning method to use, \code{"DPIR"} (default) or
-#'   \code{"BFDA"}. One method runs per call.
+#' @param method Which planning method to use, \code{"DPIR"} (default),
+#'   \code{"BFDA"}, or \code{"BSDA"}. One method runs per call.
 #' @param H,J Outer and inner Monte Carlo replication counts. \code{H} draws
 #'   from the prior (default 150), \code{J} datasets per draw (default 20).
 #' @param n Candidate sample sizes to search over. \code{NULL} (default) picks a
 #'   grid automatically and refines it by bisection.
-#' @param threshold Target threshold the criterion must reach: the DPIR ratio for
-#'   \code{"DPIR"}, the Bayes factor for \code{"BFDA"}. \code{NULL} (default)
-#'   uses 1.0 for DPIR and 10.0 for BFDA.
+#' @param threshold DPIR and BFDA only. Target threshold the criterion must
+#'   reach: the DPIR ratio for \code{"DPIR"}, the Bayes factor for \code{"BFDA"}.
+#'   \code{NULL} (default) uses 1.0 for DPIR and 10.0 for BFDA. BSDA uses
+#'   \code{measure_value} instead.
+#' @param n_tol Search tolerance, in observation units. The search stops once the
+#'   bracket reaches this width. Default 1, i.e. exact (increasing this value speeds
+#'   up the search but may reduce accuracy).
+#' @param max_n Largest sample size considered. If the target is not met by
+#'   \code{max_n}, the search stops and reports non-convergence. Default 5000.
 #' @param target_probability DPIR only: how often the ratio must reach
 #'   \code{threshold}. Default 0.95.
 #' @param rho_quantile BFDA only: which edge to plan around. Edges are ordered
@@ -397,53 +500,96 @@ prior_ess.ggm_elicited <- function(params,
 #' @param nsim_bf BFDA only: number of Monte Carlo samples to estimate the Bayes factor 
 #'    for sparse graphs. Default 1000. Ignored for dense graphs, where the Bayes factor 
 #'    is available in closed form.
-#' @param n_tol Search tolerance, in observation units. The search stops once the
-#'   bracket reaches this width. Default 1, i.e. exact (increasing this value speeds
-#'   up the search but may reduce accuracy).
-#' @param max_n Largest sample size considered. If the target is not met by
-#'   \code{max_n}, the search stops and reports non-convergence. Default 5000.
-#' @param ... Ignored, present for consistency with the generic \code{design()}.
+#' @param measure,measure_value,target_pow BSDA only: the measure to plan for
+#'   (\code{"sen"} or \code{"spe"}), the target value of that measure, and the target 
+#'   power to achieve it. Defaults are \code{"sen"}, 0.8, and 0.8.
+#' @param range_lower BSDA only: the lower bound of the sample size search range. Default 2.
+#' @param control BSDA only: a list of control parameters, as returned by
+#'   \code{\link{bsda_control}}. Default \code{bsda_control()}.
+#' #' @param ... Ignored, present for consistency with the generic \code{design()}.
 #' @return A \code{ggm_design} object, which also inherits from
-#'   \code{bgm_design}. Its \code{results} component containes the recommended
-#'   sizes: \code{n_star_global} and \code{n_star_pw} for \code{"DPIR"},
+#'   \code{bgm_design}. Its \code{results} component contains the recommended
+#'   sizes: \code{n_star_global} and \code{n_star_pw} for \code{"DPIR"};
 #'   \code{n_star_power_h0} and \code{n_star_power_h1} for \code{"BFDA"}, each
-#'   with a convergence flag. A size that was not reached within the search is
-#'   \code{NA} and its convergence flag is \code{FALSE}. \code{print} and \code{summary}
-#'   methods are available.
+#'   with a convergence flag, and a single \code{n_star} with a confidence
+#'   interval (\code{ci_lo}, \code{ci_hi}) for \code{"BSDA"}. For DPIR and BFDA,
+#'   a sample size not reached within the search is \code{NA} with a \code{FALSE}
+#'   convergence flag. For BSDA, \code{identified} is \code{FALSE} when the fit
+#'   could not be established (too few non-saturated grid points), and
+#'   \code{converged} is \code{FALSE} when the search stopped at \code{max_iter}
+#'   without stabilizing. \code{print} and \code{summary} methods are available.
 #' @details
-#' Under BFDA the edge is tested with \code{H0} the edge absent against
-#' \code{H1} the edge present, and the Bayes factor reported throughout is
+#' Each method targets a criterion at a required frequency, but the criterion
+#' and the arguments differ:
+#' \describe{
+#'   \item{DPIR}{Targets a data-to-prior information ratio. Uses
+#'     \code{threshold} (the ratio to surpass, default is 1) and
+#'     \code{target_probability} (how often, default is 0.95).}
+#'   \item{BFDA}{Targets a Bayes factor at a representative edge. Uses
+#'     \code{threshold} (the Bayes factor value to surpass, default is 10), \code{pow0}/\code{pow1}
+#'     (the target power under each hypothesis), and \code{rho_quantile} (which
+#'     edge to plan around).}
+#'   \item{BSDA}{Targets a selection criterion (sensitivity or specificity) at a
+#'     given power. Uses \code{measure} (\code{"sen"} or \code{"spe"}),
+#'     \code{measure_value} (the level to reach, default 0.8), \code{target_pow}
+#'     (the target power, default 0.8), \code{range_lower} (the smallest \code{n}
+#'     searched), and \code{control} (sampler and fit settings; see
+#'     \code{\link{bsda_control}}). Requires posterior inclusion probabilities,
+#'     supplied as \code{pip} to \code{\link{ggm_parameters}}, and a sparse
+#'     graph.}
+#' }
+#' Arguments not required by a method are ignored.
+#'
+#' Under BFDA the edge is tested with \code{H0} : "the edge is absent" against
+#' \code{H1} : "the edge is present", and the Bayes factor reported throughout is
 #' \code{BF01}, the Bayes factor for absence: \code{BF01 > threshold} excludes
 #' the edge, \code{BF01 < 1/threshold} detects it. This is the reciprocal of the
 #' inclusion Bayes factor \code{BF10}.
 #'
-#' Neither error rate is the complement of the corresponding power, since a
-#' Bayes factor between \code{1/threshold} and \code{threshold} is inconclusive
-#' and counts towards neither.
+#' Under BSDA the search proceeds in two stages: a coarse exploration locates the
+#' region where the target power is met, then repeatedly fits a probit model to
+#' the power curve, inverts it for \code{n*}, and narrows the grid, until the
+#' recommendation stabilizes. Because the recommendation comes from a
+#' fitted curve rather than a direct threshold crossing, it carries a confidence
+#' interval, and it can fail in two ways: \code{identified = FALSE} (the fit could
+#' not be established) or \code{converged = FALSE} (the loop hit \code{max_iter}
+#' without stabilizing).
 #'
 #' Cost grows with \code{H * J} and with the width of the search: the criterion
 #' is evaluated by simulation at every candidate \code{n}.
 #' @family sample size planning
 #' @export
-design.ggm_elicited <- function(params, method = c("DPIR", "BFDA"),
+design.ggm_elicited <- function(params,
+                                method = c("DPIR", "BFDA", "BSDA"),
                                 H = 150L, J = 20L, n = NULL,
-                                threshold = NULL,
+                                threshold = NULL, # DPIR and BFDA
+                                n_tol = 1L, max_n = 5000L,
+                                # DPIR
                                 target_probability = 0.95,
+                                # BFDA
                                 rho_quantile = 0.5,
                                 pow0 = 0.8, pow1 = 0.8,
                                 nsim_bf = 1000L,
-                                n_tol = 1L, max_n = 5000L, ...) {
+                                # BSDA
+                                measure = c("sen", "spe"),
+                                measure_value = 0.8,
+                                target_pow = 0.8,
+                                range_lower = 2L,
+                                control = bsda_control(),
+                                ...) {
   method <- match.arg(method)
+  measure <- match.arg(measure)
   ep <- params
 
-  K  <- ep$scale
-  G  <- ep$G
-  nu <- ep$nu
+  K   <- ep$scale
+  G   <- ep$G
+  nu  <- ep$nu
 
   if (is.null(n)) n <- seq.int(nu, max(nu * 4L, 200L), length.out = 20L)
   n <- as.integer(round(n))
 
-  thr <- if (!is.null(threshold)) threshold else if (method == "DPIR") 1.0 else 10.0 # Default 1.0 for DPIR, 10.0 for BFDA
+  # setting defaults if NULL
+  threshold <- if (!is.null(threshold)) threshold else if (method == "DPIR") 1.0 else if (method == "BFDA") 10.0  # Default 1.0 for DPIR, 10.0 for BFDA
 
   results <- switch(method,
     DPIR = {
@@ -456,7 +602,7 @@ design.ggm_elicited <- function(params, method = c("DPIR", "BFDA"),
         H                  = H,
         J                  = J,
         n                  = n,
-        threshold          = thr,
+        threshold          = threshold,
         optimize           = TRUE,
         target_probability = target_probability,
         n_tol              = n_tol,
@@ -488,11 +634,15 @@ design.ggm_elicited <- function(params, method = c("DPIR", "BFDA"),
           n           = n,
           pow0        = pow0, 
           pow1        = pow1,
-          threshold   = thr, 
+          threshold   = threshold, 
           optimize    = TRUE, 
           nsim_bf     = nsim_bf,
           n_tol       = n_tol, 
-          max_n       = max_n
+          max_n       = max_n,
+          gwish_sampler = "direct", 
+          gwish_tol = 1e-08, 
+          gwish_iter = 500, 
+          gwish_burnin = 500 # for gibbs sampler, not used in direct sampler
         )
       } else {
         cpp_design_bfda_edge_dense(
@@ -506,25 +656,75 @@ design.ggm_elicited <- function(params, method = c("DPIR", "BFDA"),
           n           = n,
           pow0        = pow0, 
           pow1        = pow1,
-          threshold   = thr, 
+          threshold   = threshold, 
           optimize    = TRUE, 
           n_tol       = n_tol, 
-          max_n       = max_n
+          max_n       = max_n,
+          gwish_sampler = "direct",
+          gwish_tol = 1e-08, 
+          gwish_iter = 500, 
+          gwish_burnin = 500 # for gibbs sampler, not used in direct sampler
         )
       }
       # carry the (1-based) planning edge for print/summary methods
       res$edge     <- c(edge$m, edge$l)
       res$edge_rho <- edge$rho
       res
+    },
+
+    BSDA = {
+      if (!ep$sparse)
+        stop("BSDA is defined for sparse graphs only (edge selection needs absent edges to detect).",
+            call. = FALSE)
+      if (is.null(ep$pip))
+        stop("BSDA needs posterior inclusion probabilities; supply 'pip' to ggm_parameters().",
+            call. = FALSE)
+
+      cpp_bsda_probit(
+          K                         = K,
+          G                         = G,
+          pip                       = ep$pip,
+          p                         = ep$p,
+          nu                        = nu,
+          measure                   = measure,
+          measure_value             = measure_value,
+          target_pow                = target_pow,
+          range_lower               = range_lower,
+          max_n                     = max_n,
+          n_scout                   = control$n_scout,
+          n_main                    = control$n_main,
+          H                         = H,
+          H_scout                   = max(20L, round(H / 2)),
+          J                         = J,
+          scout_frac                = control$scout_frac,
+          gwish_sampler             = control$gwish_sampler,
+          gwish_tol                 = control$gwish_tol,
+          gwish_iter                = control$gwish_iter,
+          gwish_burnin              = control$gwish_burnin,
+          edge_selection_threshold  = control$edge_threshold,
+          init                      = "empty",
+          fit_iterations            = control$fit_iterations,
+          fit_burnin                = control$fit_burnin,
+          alpha                     = control$alpha,
+          n_boot                    = control$n_boot,
+          eps                       = control$eps,
+          tol                       = n_tol,
+          tol_frac                  = control$tol_frac,
+          max_iter                  = control$max_iter,
+          verbose                   = control$verbose
+        )
     }
   )
 
   call_info <- if (method == "DPIR") {
-    list(H = H, J = J, threshold = thr, target_probability = target_probability)
-  } else {  # BFDA
-    ci <- list(H = H, J = J, threshold = thr, pow0 = pow0, pow1 = pow1, rho_quantile = rho_quantile)
-    if (ep$sparse) ci$nsim_bf <- nsim_bf
-    ci
+    list(H = H, J = J, threshold = threshold, target_probability = target_probability)
+  } else if (method == "BFDA") {
+    list(H = H, J = J, threshold = threshold, pow0 = pow0, pow1 = pow1,
+        rho_quantile = rho_quantile)
+  } else {  # BSDA
+    list(H = H, J = J,
+        measure = measure, measure_value = measure_value, target_pow = target_pow,
+        control = control)
   }
 
   call_info$n_tol <- n_tol
@@ -543,9 +743,9 @@ print.ggm_design <- function(x, ...) {
 
   cat("<design>  method:", x$method, " family:", x$family, " prior:", x$prior, "\n")
 
-  r <- x$results 
+  r   <- x$results 
   nst <- .design_n_star(x) 
-  cv <- .design_converged(x)
+  cv  <- .design_converged(x)
 
   if (x$method == "DPIR") {
     cat("  planned sample size (DPIR determinant ratio):\n")
@@ -555,7 +755,7 @@ print.ggm_design <- function(x, ...) {
     else cat("    global : not reached within the search range\n")
     if (!is.na(nst$pw)) cat(sprintf("    weakest parameter : n* = %d\n", nst$pw))
     else cat("    weakest parameter : not reached within the search range\n")
-  } else {
+  } else if (x$method == "BFDA") {
     edge <- r$edge
     if (!is.null(edge)) {
       cat(sprintf("  planning edge: (%d, %d)", edge[1], edge[2]))
@@ -569,6 +769,20 @@ print.ggm_design <- function(x, ...) {
     if (!is.na(nst$h1)) cat(sprintf("    H1 (edge present) : n* = %d   (power = %.3f)\n",
                                     nst$h1, r$power_h1_at_n_star))
     else cat("    H1 (edge present) : not reached within the search range\n")
+  } else {  # BSDA
+    cat(sprintf("  criterion: %s = %.3f, target power = %.3f\n",
+                r$measure, r$measure_value, r$target_pow))
+    if (isTRUE(r$identified)) {
+      cat(sprintf("  planned sample size: n* = %d   CI[%d, %d]\n",
+                  as.integer(round(r$n_star)),
+                  as.integer(round(r$ci_lo)), as.integer(round(r$ci_hi))))
+      if (isTRUE(r$direction_mismatch))
+        cat("  warning: fitted slope direction unexpected. Treat n* with caution.\n")
+      if (!isTRUE(r$converged))
+        cat("  note: stopped at max_iter without stabilizing. Reporting last fit.\n")
+    } else {
+      cat("  n* not identified (too few non-saturated grid points)\n")
+    }
   }
   if (!all(cv)) cat("  note: not all targets converged. Consider a wider search / larger max_n.\n")
   invisible(x)
@@ -599,8 +813,8 @@ summary.ggm_design <- function(object, ...) {
     if (length(bits)) cat("  settings:", paste(bits, collapse = "  "), "\n")
   }
   cat("\n")
-  nst <-  .design_n_star(x)
-  cv <-   .design_converged(x)
+  nst <- .design_n_star(x)
+  cv  <- .design_converged(x)
   if (x$method == "DPIR") {
     cat("  Global determinant-ratio target\n")
     if (!is.na(nst$global))
@@ -616,7 +830,7 @@ summary.ggm_design <- function(object, ...) {
                     min(pw), stats::median(pw), max(pw), length(pw)))
       }
     } else cat(sprintf("    not reached (converged: %s)\n", cv[["pw"]]))
-  } else {
+  } else if (x$method == "BFDA") {
     edge <- r$edge
     if (!is.null(edge)) cat(sprintf("  Planning edge: (%d, %d)%s\n", edge[1], edge[2],
                               if (!is.null(r$edge_rho)) sprintf("   rho = %.3f", r$edge_rho) else ""))
@@ -628,7 +842,27 @@ summary.ggm_design <- function(object, ...) {
     if (!is.na(nst$h1)) cat(sprintf("    n* = %d   power = %.3f   FNR = %.3f   converged: %s\n",
                               nst$h1, r$power_h1_at_n_star, r$fnr_at_n_star_power_h1, cv[["h1"]]))
     else cat(sprintf("    not reached (converged: %s)\n", cv[["h1"]]))
+  } else {  # BSDA
+    cat(sprintf("  criterion: %s = %.3f, target power = %.3f\n",
+                r$measure, r$measure_value, r$target_pow))
+    if (isTRUE(r$identified)) {
+      cat(sprintf("  planned sample size: n* = %d   CI[%d, %d]\n",
+                  as.integer(round(r$n_star)),
+                  as.integer(round(r$ci_lo)), as.integer(round(r$ci_hi))))
+      cat(sprintf("  converged: %s   (%d iterations)\n",
+                  isTRUE(r$converged), r$iterations))
+      if (isTRUE(r$direction_mismatch))
+        cat("  warning: fitted slope direction unexpected. Treat n* with caution.\n")
+      if (!isTRUE(r$converged))
+        cat("  note: stopped at max_iter without stabilizing. Reporting last fit.\n")
+      cat(sprintf("  fit: %d non-saturated grid points, bootstrap kept %.0f%%\n",
+                  r$n_nonsat, 100 * r$boot_keep_frac))
+    } else {
+      cat(sprintf("  n* not identified (only %d non-saturated grid point(s); need >= 3)\n",
+                  r$n_nonsat))
+    }
   }
+
   unit <- if (x$method == "BFDA") "all present edges" else "all parameters"
   cat(sprintf("\n  next: validate() refines power at n*; validate(scope='all_edges') checks %s.\n",
               unit))
@@ -668,6 +902,33 @@ summary.ggm_design <- function(object, ...) {
 }
 
 #' @noRd
+.design_eval_bsda_ggm <- function(ep, n_eval, H, J, measure, measure_value,
+                                  control, seed = NULL) {
+  power_at_n(
+    K = ep$scale, 
+    G = ep$G, 
+    pip = ep$pip, 
+    p = ep$p, 
+    nu = ep$nu,
+    n = as.integer(n_eval), 
+    H = H, 
+    J = J,
+    gwish_sampler            = control$gwish_sampler,
+    gwish_tol                = control$gwish_tol,
+    gwish_iter               = control$gwish_iter,
+    gwish_burnin             = control$gwish_burnin,
+    edge_selection_threshold = control$edge_threshold,
+    measure                  = measure,
+    measure_value            = measure_value,
+    init                     = "empty",
+    fit_iterations           = control$fit_iterations,
+    fit_burnin               = control$fit_burnin,
+    alpha                    = control$alpha,
+    seed                     = seed
+  )
+}
+
+#' @noRd
 .present_edges <- function(G) {
   ut <- which(upper.tri(G) & G == 1, arr.ind = TRUE)
   if (nrow(ut) == 0L) stop("No present edges in G to evaluate.", call. = FALSE)
@@ -687,11 +948,12 @@ summary.ggm_design <- function(object, ...) {
 #' @param which_n Which of the plan's recommended sizes to validate at.
 #'   \code{NULL} (default) picks \code{"global"} for a DPIR plan and
 #'   \code{"h1"} for a BFDA plan. DPIR plans also accept \code{"pw"}, the
-#'   parameterwise size; BFDA plans also accept \code{"h0"}.
+#'   parameterwise size; BFDA plans also accept \code{"h0"}; BSDA plans have only one size.
 #' @param scope BFDA only: whether to check the edge the plan was built
 #'   around (\code{"planning_edge"}) or every present edge in the graph
 #'   (\code{"all_edges"}), the stricter guarantee check. \code{NULL} (default) means
 #'   \code{"planning_edge"}. This argument is ignored for DPIR plans.
+#' @param seed Random seed for reproducibility.
 #' @param ... Ignored, present for consistency with the generic.
 #' @return A \code{ggm_design_validation} object, which also inherits from
 #'   \code{bgm_design_validation}. Its \code{n_star} component is the size that
@@ -700,7 +962,7 @@ summary.ggm_design <- function(object, ...) {
 #' @family sample size planning
 #' @export
 validate.ggm_design <- function(plan, H = 500L, J = 100L,
-                                which_n = NULL, scope = NULL, ...) {
+                                which_n = NULL, scope = NULL, seed = NULL, ...) {
   r <- plan$results 
   info <- plan$call_info 
   ep <- plan$ep
@@ -730,49 +992,76 @@ validate.ggm_design <- function(plan, H = 500L, J = 100L,
                        target_probability = info$target_probability,
                        which_n = which_n,
                        n_star_global = r$n_star_global, n_star_pw = r$n_star_pw)))
-  }
+  } else if (plan$method == "BFDA") {
+    # BFDA
+    which_n <- match.arg(which_n %||% "h1", c("h1", "h0"))
+    scope   <- match.arg(scope   %||% "planning_edge", c("planning_edge", "all_edges"))
+    n_star  <- if (which_n == "h1") r$n_star_power_h1 else r$n_star_power_h0
+    if (is.null(n_star) || is.na(n_star))
+      stop(sprintf("Plan has no converged n* for %s to validate.", toupper(which_n)),
+          call. = FALSE)
 
-  # BFDA
-  which_n <- match.arg(which_n %||% "h1", c("h1", "h0"))
-  scope   <- match.arg(scope   %||% "planning_edge", c("planning_edge", "all_edges"))
-  n_star  <- if (which_n == "h1") r$n_star_power_h1 else r$n_star_power_h0
-  if (is.null(n_star) || is.na(n_star))
-    stop(sprintf("Plan has no converged n* for %s to validate.", toupper(which_n)),
-         call. = FALSE)
+    thr <- info$threshold %||% 10.0
+    pow0 <- info$pow0 %||% 0.8
+    pow1 <- info$pow1 %||% 0.8
 
-  thr <- info$threshold %||% 10.0
-  pow0 <- info$pow0 %||% 0.8
-  pow1 <- info$pow1 %||% 0.8
+    if (scope == "planning_edge") { # single edge: the one the plan was built around
+      res <- .design_eval_bfda_edge_ggm(ep, r$edge[1] - 1L, r$edge[2] - 1L, n_star, H, J, thr, pow0, pow1)
+      return(new_bgm_design_validation(
+        family = "ggm", method = "BFDA", scope = "planning_edge", prior = plan$prior,
+        n_star = n_star,
+        results = list(planning_edge = res, edge = r$edge, edge_rho = r$edge_rho,
+                      which_n = which_n),
+        call_info = list(H = H, J = J, threshold = thr, pow0 = pow0, pow1 = pow1,
+                        which_n = which_n)))
+    }
 
-  if (scope == "planning_edge") { # single edge: the one the plan was built around
-    res <- .design_eval_bfda_edge_ggm(ep, r$edge[1] - 1L, r$edge[2] - 1L, n_star, H, J, thr, pow0, pow1)
-    return(new_bgm_design_validation(
-      family = "ggm", method = "BFDA", scope = "planning_edge", prior = plan$prior,
+    # scope == "all_edges": two-sided guarantee over present edges
+    edges <- .present_edges(ep$G)
+    tab <- do.call(rbind, lapply(seq_len(nrow(edges)), function(e) {
+      res_e <- .design_eval_bfda_edge_ggm(ep, edges$m0[e], edges$l0[e],
+                                          n_star, H, J, thr, pow0, pow1)
+      data.frame(m = edges$m1[e], l = edges$l1[e],
+                power_h0 = as.numeric(res_e$power_h0)[1],
+                power_h1 = as.numeric(res_e$power_h1)[1],
+                fpr_h0   = if (!is.null(res_e$fpr_h0)) as.numeric(res_e$fpr_h0)[1] else NA_real_,
+                fnr_h1   = if (!is.null(res_e$fnr_h1)) as.numeric(res_e$fnr_h1)[1] else NA_real_)
+    }))
+    new_bgm_design_validation(
+      family = "ggm", method = "BFDA", scope = "all_edges", prior = plan$prior,
       n_star = n_star,
-      results = list(planning_edge = res, edge = r$edge, edge_rho = r$edge_rho,
-                     which_n = which_n),
+      results = list(per_edge = tab, edge = r$edge, edge_rho = r$edge_rho,
+                    which_n = which_n, pow0 = pow0, pow1 = pow1),
       call_info = list(H = H, J = J, threshold = thr, pow0 = pow0, pow1 = pow1,
-                       which_n = which_n)))
-  }
+                      which_n = which_n))
+  } else {  # BSDA
+    n_star <- r$n_star
+    if (is.null(n_star) || !is.finite(n_star) || !isTRUE(r$identified))
+      stop("Plan has no identified n* to validate.", call. = FALSE)
+    n_star <- as.integer(round(n_star))
 
-  # scope == "all_edges": two-sided guarantee over present edges
-  edges <- .present_edges(ep$G)
-  tab <- do.call(rbind, lapply(seq_len(nrow(edges)), function(e) {
-    res_e <- .design_eval_bfda_edge_ggm(ep, edges$m0[e], edges$l0[e],
-                                        n_star, H, J, thr, pow0, pow1)
-    data.frame(m = edges$m1[e], l = edges$l1[e],
-               power_h0 = as.numeric(res_e$power_h0)[1],
-               power_h1 = as.numeric(res_e$power_h1)[1],
-               fpr_h0   = if (!is.null(res_e$fpr_h0)) as.numeric(res_e$fpr_h0)[1] else NA_real_,
-               fnr_h1   = if (!is.null(res_e$fnr_h1)) as.numeric(res_e$fnr_h1)[1] else NA_real_)
-  }))
-  new_bgm_design_validation(
-    family = "ggm", method = "BFDA", scope = "all_edges", prior = plan$prior,
-    n_star = n_star,
-    results = list(per_edge = tab, edge = r$edge, edge_rho = r$edge_rho,
-                   which_n = which_n, pow0 = pow0, pow1 = pow1),
-    call_info = list(H = H, J = J, threshold = thr, pow0 = pow0, pow1 = pow1,
-                     which_n = which_n))
+    ctrl <- info$control %||% bsda_control() # default control if not stored in the plan
+
+    res <- .design_eval_bsda_ggm(
+      ep = ep, n_star = n_star, H = H, J = J,
+      measure       = info$measure,
+      measure_value = info$measure_value,         
+      control       = ctrl, seed = seed)
+
+    return(new_bgm_design_validation(
+      family = "ggm", method = "BSDA", scope = NULL, prior = plan$prior,
+      n_star = n_star,
+      results = list(power_at_n = res,
+                    measure       = info$measure,
+                    measure_value = info$measure_value,
+                    target_pow    = info$target_pow),
+      call_info = list(H = H, J = J,
+                      measure = info$measure,
+                      measure_value = info$measure_value,
+                      target_pow = info$target_pow,
+                      alpha = ctrl$alpha,
+                      n_star = n_star)))
+  }
 }
 
 # Print and Summary methods
@@ -790,17 +1079,31 @@ print.ggm_design_validation <- function(x, ...) {
       cat(sprintf("  parameterwise Pr at n* : min %.3f / median %.3f / max %.3f\n",
                   min(pw), stats::median(pw), max(pw)))
     }
-  } else if (x$scope == "planning_edge") {
-    pe <- r$planning_edge
-    cat(sprintf("  planning edge (%d, %d): power_h0 = %.3f  power_h1 = %.3f\n",
-                r$edge[1], r$edge[2], as.numeric(pe$power_h0)[1], as.numeric(pe$power_h1)[1]))
-  } else {
-    tab  <- r$per_edge
-    p1   <- sum(tab$power_h1 >= r$pow1, na.rm = TRUE)
-    p0   <- sum(tab$power_h0 >= r$pow0, na.rm = TRUE)
-    cat(sprintf("  present edges at n*: detect (power_h1>=%.2f) %d/%d ; exclude (power_h0>=%.2f) %d/%d\n",
-                r$pow1, p1, nrow(tab), r$pow0, p0, nrow(tab))) # here: if there are NA, nrow(tab) should exclude them; in practice tab is always complete (add NA guard here if needed)
+  } else if (x$method == "BFDA") {
+      if(x$scope == "planning_edge") {
+      pe <- r$planning_edge
+      cat(sprintf("  planning edge (%d, %d): power_h0 = %.3f  power_h1 = %.3f\n",
+                  r$edge[1], r$edge[2], as.numeric(pe$power_h0)[1], as.numeric(pe$power_h1)[1]))
+    } else {
+      tab  <- r$per_edge
+      p1   <- sum(tab$power_h1 >= r$pow1, na.rm = TRUE)
+      p0   <- sum(tab$power_h0 >= r$pow0, na.rm = TRUE)
+      cat(sprintf("  present edges at n*: detect (power_h1>=%.2f) %d/%d ; exclude (power_h0>=%.2f) %d/%d\n",
+                  r$pow1, p1, nrow(tab), r$pow0, p0, nrow(tab))) # here: if there are NA, nrow(tab) should exclude them; in practice tab is always complete (add NA guard here if needed)
+    }
+  } else {  # BSDA
+    pw    <- r$power_at_n
+    power <- as.numeric(pw$power)[1]
+    hw    <- as.numeric(pw$halfwidth)[1]
+
+    cat(sprintf("  criterion: %s = %.3f, target power = %.3f\n",
+                r$measure, r$measure_value, r$target_pow))
+    cat(sprintf("  achieved power at n* = %d : %.3f +/- %.3f\n",
+                x$n_star, power, hw))
+    ok <- (power - hw) >= r$target_pow
+    cat(sprintf("  target %s at n*\n", if (ok) "met" else "not met"))
   }
+
   invisible(x)
 }
 
@@ -834,39 +1137,61 @@ summary.ggm_design_validation <- function(object, ...) {
         cat(sprintf("  parameters reaching target: %d / %d\n", reached, length(pw)))
       }
     }
-  } else if (x$scope == "planning_edge") {
-    pe <- r$planning_edge
-    cat(sprintf("  planning edge (%d, %d), rho = %s\n",
-                r$edge[1], r$edge[2], format(r$edge_rho %||% NA, digits = 3)))
-    cat(sprintf("    power_h0 (exclude absent) = %.3f  (FPR = %s)\n",
-                as.numeric(pe$power_h0)[1],
-                if (!is.null(pe$fpr_h0)) sprintf("%.3f", as.numeric(pe$fpr_h0)[1]) else "NA"))
-    cat(sprintf("    power_h1 (detect present) = %.3f  (FNR = %s)\n",
-                as.numeric(pe$power_h1)[1],
-                if (!is.null(pe$fnr_h1)) sprintf("%.3f", as.numeric(pe$fnr_h1)[1]) else "NA"))
-  } else {  # all_edges
-    tab <- r$per_edge
-    p1  <- sum(tab$power_h1 >= r$pow1, na.rm = TRUE)
-    p0  <- sum(tab$power_h0 >= r$pow0, na.rm = TRUE)
-    cat("  Guarantee check at n* (present edges):\n")
-    cat(sprintf("    detect presence (power_h1 >= %.2f): %d / %d edges\n",
-                r$pow1, p1, nrow(tab)))
-    cat(sprintf("    exclude absence (power_h0 >= %.2f): %d / %d edges\n",
-                r$pow0, p0, nrow(tab)))
-    short1 <- tab[tab$power_h1 < r$pow1, , drop = FALSE]
-    short0 <- tab[tab$power_h0 < r$pow0, , drop = FALSE]
-    if (nrow(short1)) {
-      cat("    underpowered for detection (H1):\n")
-      for (i in seq_len(nrow(short1)))
-        cat(sprintf("      (%d, %d): power_h1 = %.3f\n",
-                    short1$m[i], short1$l[i], short1$power_h1[i]))
+  } else if (x$method == "BFDA") {
+      if (x$scope == "planning_edge") {
+      pe <- r$planning_edge
+      cat(sprintf("  planning edge (%d, %d), rho = %s\n",
+                  r$edge[1], r$edge[2], format(r$edge_rho %||% NA, digits = 3)))
+      cat(sprintf("    power_h0 (exclude absent) = %.3f  (FPR = %s)\n",
+                  as.numeric(pe$power_h0)[1],
+                  if (!is.null(pe$fpr_h0)) sprintf("%.3f", as.numeric(pe$fpr_h0)[1]) else "NA"))
+      cat(sprintf("    power_h1 (detect present) = %.3f  (FNR = %s)\n",
+                  as.numeric(pe$power_h1)[1],
+                  if (!is.null(pe$fnr_h1)) sprintf("%.3f", as.numeric(pe$fnr_h1)[1]) else "NA"))
+    } else {  # all_edges
+      tab <- r$per_edge
+      p1  <- sum(tab$power_h1 >= r$pow1, na.rm = TRUE)
+      p0  <- sum(tab$power_h0 >= r$pow0, na.rm = TRUE)
+      cat("  Guarantee check at n* (present edges):\n")
+      cat(sprintf("    detect presence (power_h1 >= %.2f): %d / %d edges\n",
+                  r$pow1, p1, nrow(tab)))
+      cat(sprintf("    exclude absence (power_h0 >= %.2f): %d / %d edges\n",
+                  r$pow0, p0, nrow(tab)))
+      short1 <- tab[tab$power_h1 < r$pow1, , drop = FALSE]
+      short0 <- tab[tab$power_h0 < r$pow0, , drop = FALSE]
+      if (nrow(short1)) {
+        cat("    underpowered for detection (H1):\n")
+        for (i in seq_len(nrow(short1)))
+          cat(sprintf("      (%d, %d): power_h1 = %.3f\n",
+                      short1$m[i], short1$l[i], short1$power_h1[i]))
+      }
+      if (nrow(short0)) {
+        cat("    underpowered for exclusion (H0):\n")
+        for (i in seq_len(nrow(short0)))
+          cat(sprintf("      (%d, %d): power_h0 = %.3f\n",
+                      short0$m[i], short0$l[i], short0$power_h0[i]))
+      }
     }
-    if (nrow(short0)) {
-      cat("    underpowered for exclusion (H0):\n")
-      for (i in seq_len(nrow(short0)))
-        cat(sprintf("      (%d, %d): power_h0 = %.3f\n",
-                    short0$m[i], short0$l[i], short0$power_h0[i]))
-    }
+  } else {  # BSDA
+    pw    <- r$power_at_n
+    power <- as.numeric(pw$power)[1]
+    hw    <- as.numeric(pw$halfwidth)[1]
+    meas  <- as.numeric(pw$measure)[1]
+    conf  <- 100 * (1 - (x$call_info$alpha %||% 0.05))   # matches power_at_n's alpha
+
+    cat(sprintf("  criterion: %s = %.3f, target power = %.3f\n",
+                r$measure, r$measure_value, r$target_pow))
+    cat(sprintf("  validated at n* = %d  (H = %s, J = %s)\n",
+                x$n_star, pw$H, pw$J))
+    cat(sprintf("  achieved power    : %.3f   %g%% CI [%.3f, %.3f]\n",
+                power, conf, max(0, power - hw), min(1, power + hw)))
+    cat(sprintf("  mean %s attained : %.3f\n", r$measure, meas))
+
+    ok <- (power - hw) >= r$target_pow
+    cat(sprintf("  target %s at n*", if (ok) "met" else "not met"))
+    if (!ok && power >= r$target_pow)
+      cat(" (point estimate clears it, but the CI does not)")
+    cat("\n")
   }
   invisible(object)
 }

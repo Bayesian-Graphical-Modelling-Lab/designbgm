@@ -163,3 +163,14 @@ arma::vec parameterwise_ess(const arma::mat &X,
     ess %= ess; // square the values
     return ess;
 }
+
+// Find the quantile of an arma::vec via linear interpolation
+double arma_quantile(const arma::vec& v, double pr) {
+    if (v.n_elem == 0) return arma::datum::nan;
+    arma::vec s = arma::sort(v);
+    const double h  = (double)(s.n_elem - 1) * pr;
+    const arma::uword lo = (arma::uword)std::floor(h);
+    if (lo + 1 >= s.n_elem) return s(s.n_elem - 1);
+    const double frac = h - (double)lo;
+    return s(lo) * (1.0 - frac) + s(lo + 1) * frac;
+}

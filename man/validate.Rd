@@ -30,6 +30,7 @@ Methods are available for the following classes:
 }
 \seealso{
 Other sample size planning: 
+\code{\link{bsda_control}()},
 \code{\link{design}()},
 \code{\link{design.ggm_elicited}()},
 \code{\link{validate.ggm_design}()}

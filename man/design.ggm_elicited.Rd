@@ -6,18 +6,23 @@
 \usage{
 \method{design}{ggm_elicited}(
   params,
-  method = c("DPIR", "BFDA"),
+  method = c("DPIR", "BFDA", "BSDA"),
   H = 150L,
   J = 20L,
   n = NULL,
   threshold = NULL,
+  n_tol = 1L,
+  max_n = 5000L,
   target_probability = 0.95,
   rho_quantile = 0.5,
   pow0 = 0.8,
   pow1 = 0.8,
   nsim_bf = 1000L,
-  n_tol = 1L,
-  max_n = 5000L,
+  measure = c("sen", "spe"),
+  measure_value = 0.8,
+  target_pow = 0.8,
+  range_lower = 2L,
+  control = bsda_control(),
   ...
 )
 }
@@ -25,8 +30,8 @@
 \item{params}{A \code{ggm_elicited} object, as returned by \code{\link{elicit_prior}}. 
 It also inherits from \code{bgm_elicited}.}
 
-\item{method}{Which planning method to use, \code{"DPIR"} (default) or
-\code{"BFDA"}. One method runs per call.}
+\item{method}{Which planning method to use, \code{"DPIR"} (default),
+\code{"BFDA"}, or \code{"BSDA"}. One method runs per call.}
 
 \item{H, J}{Outer and inner Monte Carlo replication counts. \code{H} draws
 from the prior (default 150), \code{J} datasets per draw (default 20).}
@@ -34,9 +39,17 @@ from the prior (default 150), \code{J} datasets per draw (default 20).}
 \item{n}{Candidate sample sizes to search over. \code{NULL} (default) picks a
 grid automatically and refines it by bisection.}
 
-\item{threshold}{Target threshold the criterion must reach: the DPIR ratio for
-\code{"DPIR"}, the Bayes factor for \code{"BFDA"}. \code{NULL} (default)
-uses 1.0 for DPIR and 10.0 for BFDA.}
+\item{threshold}{DPIR and BFDA only. Target threshold the criterion must
+reach: the DPIR ratio for \code{"DPIR"}, the Bayes factor for \code{"BFDA"}.
+\code{NULL} (default) uses 1.0 for DPIR and 10.0 for BFDA. BSDA uses
+\code{measure_value} instead.}
+
+\item{n_tol}{Search tolerance, in observation units. The search stops once the
+bracket reaches this width. Default 1, i.e. exact (increasing this value speeds
+up the search but may reduce accuracy).}
+
+\item{max_n}{Largest sample size considered. If the target is not met by
+\code{max_n}, the search stops and reports non-convergence. Default 5000.}
 
 \item{target_probability}{DPIR only: how often the ratio must reach
 \code{threshold}. Default 0.95.}
@@ -57,47 +70,81 @@ correctly excluding the edge, and \code{pow1} targets
 for sparse graphs. Default 1000. Ignored for dense graphs, where the Bayes factor 
 is available in closed form.}
 
-\item{n_tol}{Search tolerance, in observation units. The search stops once the
-bracket reaches this width. Default 1, i.e. exact (increasing this value speeds
-up the search but may reduce accuracy).}
+\item{measure, measure_value, target_pow}{BSDA only: the measure to plan for
+(\code{"sen"} or \code{"spe"}), the target value of that measure, and the target 
+power to achieve it. Defaults are \code{"sen"}, 0.8, and 0.8.}
 
-\item{max_n}{Largest sample size considered. If the target is not met by
-\code{max_n}, the search stops and reports non-convergence. Default 5000.}
+\item{range_lower}{BSDA only: the lower bound of the sample size search range. Default 2.}
 
-\item{...}{Ignored, present for consistency with the generic \code{design()}.}
+\item{control}{BSDA only: a list of control parameters, as returned by
+  \code{\link{bsda_control}}. Default \code{bsda_control()}.
+#' @param ... Ignored, present for consistency with the generic \code{design()}.}
 }
 \value{
 A \code{ggm_design} object, which also inherits from
-  \code{bgm_design}. Its \code{results} component containes the recommended
-  sizes: \code{n_star_global} and \code{n_star_pw} for \code{"DPIR"},
+  \code{bgm_design}. Its \code{results} component contains the recommended
+  sizes: \code{n_star_global} and \code{n_star_pw} for \code{"DPIR"};
   \code{n_star_power_h0} and \code{n_star_power_h1} for \code{"BFDA"}, each
-  with a convergence flag. A size that was not reached within the search is
-  \code{NA} and its convergence flag is \code{FALSE}. \code{print} and \code{summary}
-  methods are available.
+  with a convergence flag, and a single \code{n_star} with a confidence
+  interval (\code{ci_lo}, \code{ci_hi}) for \code{"BSDA"}. For DPIR and BFDA,
+  a sample size not reached within the search is \code{NA} with a \code{FALSE}
+  convergence flag. For BSDA, \code{identified} is \code{FALSE} when the fit
+  could not be established (too few non-saturated grid points), and
+  \code{converged} is \code{FALSE} when the search stopped at \code{max_iter}
+  without stabilizing. \code{print} and \code{summary} methods are available.
 }
 \description{
 Recommends a sample size for a prospective Gaussian graphical
   model study, given a prior elicited from a previous one. \code{"DPIR"}
   returns two sizes, one for the graph as a whole and one at the parameterwise
   level (considering only the off-diagonal elements). \code{"BFDA"} returns 
-  one per hypothesis: under the null (edge absent) and under the alternative (edge present).
+  one per hypothesis: under the null (edge absent) and under the alternative (edge present). 
+  \code{"BSDA"} returns a single size at which edge selection reaches a target 
+  sensitivity or specificity with a given power.
 }
 \details{
-Under BFDA the edge is tested with \code{H0} the edge absent against
-\code{H1} the edge present, and the Bayes factor reported throughout is
+Each method targets a criterion at a required frequency, but the criterion
+and the arguments differ:
+\describe{
+  \item{DPIR}{Targets a data-to-prior information ratio. Uses
+    \code{threshold} (the ratio to surpass, default is 1) and
+    \code{target_probability} (how often, default is 0.95).}
+  \item{BFDA}{Targets a Bayes factor at a representative edge. Uses
+    \code{threshold} (the Bayes factor value to surpass, default is 10), \code{pow0}/\code{pow1}
+    (the target power under each hypothesis), and \code{rho_quantile} (which
+    edge to plan around).}
+  \item{BSDA}{Targets a selection criterion (sensitivity or specificity) at a
+    given power. Uses \code{measure} (\code{"sen"} or \code{"spe"}),
+    \code{measure_value} (the level to reach, default 0.8), \code{target_pow}
+    (the target power, default 0.8), \code{range_lower} (the smallest \code{n}
+    searched), and \code{control} (sampler and fit settings; see
+    \code{\link{bsda_control}}). Requires posterior inclusion probabilities,
+    supplied as \code{pip} to \code{\link{ggm_parameters}}, and a sparse
+    graph.}
+}
+Arguments not required by a method are ignored.
+
+Under BFDA the edge is tested with \code{H0} : "the edge is absent" against
+\code{H1} : "the edge is present", and the Bayes factor reported throughout is
 \code{BF01}, the Bayes factor for absence: \code{BF01 > threshold} excludes
 the edge, \code{BF01 < 1/threshold} detects it. This is the reciprocal of the
 inclusion Bayes factor \code{BF10}.
 
-Neither error rate is the complement of the corresponding power, since a
-Bayes factor between \code{1/threshold} and \code{threshold} is inconclusive
-and counts towards neither.
+Under BSDA the search proceeds in two stages: a coarse exploration locates the
+region where the target power is met, then repeatedly fits a probit model to
+the power curve, inverts it for \code{n*}, and narrows the grid, until the
+recommendation stabilizes. Because the recommendation comes from a
+fitted curve rather than a direct threshold crossing, it carries a confidence
+interval, and it can fail in two ways: \code{identified = FALSE} (the fit could
+not be established) or \code{converged = FALSE} (the loop hit \code{max_iter}
+without stabilizing).
 
 Cost grows with \code{H * J} and with the width of the search: the criterion
 is evaluated by simulation at every candidate \code{n}.
 }
 \seealso{
 Other sample size planning: 
+\code{\link{bsda_control}()},
 \code{\link{design}()},
 \code{\link{validate}()},
 \code{\link{validate.ggm_design}()}
