@@ -8,7 +8,7 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/Bayesian-Graphical-Modelling-Lab/designbgm/blob/main/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/Bayesian-Graphical-Modelling-Lab/designbgm/blob/v0.3.0/DESCRIPTION)
 
 Arena G (2026). *designbgm: Sample Size Planning for Bayesian Graphical
 Models*. R package version 0.3.0,
