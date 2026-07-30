@@ -20,7 +20,8 @@ bsda_control(
   n_boot = 5000L,
   eps = 0.001,
   tol_frac = 0.01,
-  verbose = FALSE
+  verbose = FALSE,
+  seed = NULL
 )
 }
 \arguments{

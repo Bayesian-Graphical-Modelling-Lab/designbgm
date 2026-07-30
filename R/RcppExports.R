@@ -25,8 +25,8 @@ power_at_n <- function(K, G, pip, p, n, H, J, nu, gwish_sampler, gwish_tol, gwis
     .Call(`_designbgm_power_at_n`, K, G, pip, p, n, H, J, nu, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, edge_selection_threshold, measure, measure_value, init, fit_iterations, fit_burnin, alpha, seed)
 }
 
-cpp_bsda_probit <- function(K, G, pip, p, nu, measure, measure_value, target_pow, range_lower, max_n, n_scout = 6L, n_main = 10L, H = 50L, H_scout = 20L, J = 1L, scout_frac = 1.0/3.0, gwish_sampler = "direct", gwish_tol = 1e-08, gwish_iter = 500L, gwish_burnin = 500L, edge_selection_threshold = 0.5, init = "empty", fit_iterations = 10000L, fit_burnin = 5000L, alpha = 0.05, n_boot = 5000L, eps = 1e-3, tol = 2L, tol_frac = 0.01, max_iter = 10L, verbose = TRUE) {
-    .Call(`_designbgm_cpp_bsda_probit`, K, G, pip, p, nu, measure, measure_value, target_pow, range_lower, max_n, n_scout, n_main, H, H_scout, J, scout_frac, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, edge_selection_threshold, init, fit_iterations, fit_burnin, alpha, n_boot, eps, tol, tol_frac, max_iter, verbose)
+cpp_bsda_probit <- function(K, G, pip, p, nu, measure, measure_value, target_pow, range_lower, max_n, n_scout = 6L, n_main = 10L, H = 50L, H_scout = 20L, J = 1L, scout_frac = 1.0/3.0, gwish_sampler = "direct", gwish_tol = 1e-08, gwish_iter = 500L, gwish_burnin = 500L, edge_selection_threshold = 0.5, init = "empty", fit_iterations = 10000L, fit_burnin = 5000L, alpha = 0.05, n_boot = 5000L, eps = 1e-3, tol = 2L, tol_frac = 0.01, max_iter = 10L, verbose = TRUE, seed = NULL) {
+    .Call(`_designbgm_cpp_bsda_probit`, K, G, pip, p, nu, measure, measure_value, target_pow, range_lower, max_n, n_scout, n_main, H, H_scout, J, scout_frac, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, edge_selection_threshold, init, fit_iterations, fit_burnin, alpha, n_boot, eps, tol, tol_frac, max_iter, verbose, seed)
 }
 
 cpp_ggm_prior_ess_vr_pr <- function(prior, which, nu, K, G, aggregation = "det", sampler = "direct", n_samples = 1000L, tol = 1e-6, itermax = 1000L, burnin = 500L, init = NULL, compute_cond = FALSE) {

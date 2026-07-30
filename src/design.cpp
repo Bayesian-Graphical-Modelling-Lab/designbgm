@@ -1327,7 +1327,8 @@ static GridEval bsda_eval_grid(
         int fit_burnin, 
         double alpha,
         const char* tag, 
-        bool verbose) {
+        bool verbose,
+        Rcpp::Nullable<int> seed = R_NilValue) {
 
     const int m = (int)grid.n_elem;
 
@@ -1344,7 +1345,7 @@ static GridEval bsda_eval_grid(
     for (int i = 0; i < m; ++i) {
         Rcpp::List r = power_at_n(K, G, pip, p, (int)grid(i), H, J, nu,
                                   gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, thr, measure, measure_value,
-                                  init, fit_iterations, fit_burnin, alpha, R_NilValue);
+                                  init, fit_iterations, fit_burnin, alpha, seed);
         e.power(i) = Rcpp::as<double>(r["power"]);
         e.hw(i)    = Rcpp::as<double>(r["halfwidth"]);
         e.meas(i)  = Rcpp::as<double>(r["measure"]);
@@ -1357,7 +1358,7 @@ static GridEval bsda_eval_grid(
 }
 
 // Refined grid from the scout in 5 steps:
-// (1) find interior (moving) region padded one point each
+// (1) find interior non-saturated points (eps < power < 1-eps)
 // (2) if interior is empty, use the full range [range_lower, max_n] otherwise use the interior range
 // (3) find padded range via lo_idx -=1 and hi_idx += 1, then convert to lo and hi sample sizes 
 // (4) apply bsda_log_grid to the padded range to get the refined grid
@@ -1465,6 +1466,79 @@ static ProbitResult bsda_probit_invert(const arma::ivec& n,
 }
 
 
+// Analytic warm-start interval for the BSDA search.
+// Returns {lo, hi}: an anchored, clamped sample-size bracket for the scout.
+//
+//  (1) pick the true-edge partial correlation rho_q set by (measure, measure_value)
+//  (2) Bonferroni-style effective alpha from the relevant test count
+//  (3) warm_start_n(rho_q, alpha_eff, power) -> anchor n
+//  (4) [anchor/c, anchor*c], clamped to the user range
+static std::pair<int,int> bsda_warm_interval(
+        const arma::mat& K,
+        const arma::mat& G,
+        int              p,
+        const std::string& measure,
+        double           measure_value,
+        int              range_lower,
+        int              max_n,
+        double           alpha,
+        double           power,
+        double           c = 4.0) {
+
+    // collect |partial correlation| over TRUE edges
+    std::vector<double> rho_edges;
+    for (int i = 0; i < p; ++i)
+        for (int j = i + 1; j < p; ++j)
+            if (G(i, j) > 0.5)
+                rho_edges.push_back(std::abs(-K(i,j) / std::sqrt(K(i,i)*K(j,j))));
+
+    const int n_edges    = (int)rho_edges.size();
+    const int n_total    = p * (p - 1) / 2;
+    const int n_nonedges = n_total - n_edges;
+
+    // no edges -> sensitivity/specificity anchor undefined
+    if (n_edges == 0)
+        return { range_lower, max_n };
+
+    std::sort(rho_edges.begin(), rho_edges.end());   // ascending
+
+    // (1) quantile of edge strength set by the measure target
+    //   sen: to catch measure_value of edges, size for the edge at the
+    //        (1 - measure_value) LOWER quantile (weaker edges are the
+    //        allowed misses).
+    //   spe: specificity is about non-edges; edge strength governs the
+    //        n-scale only weakly, so anchor on the median true edge as a
+    //        neutral scale and let alpha_eff carry the target.
+    const bool sen = (measure == "sen");
+    double q = sen ? (1.0 - measure_value) : 0.5;
+    q = std::min(std::max(q, 0.0), 1.0);
+    double idx = q * (n_edges - 1);
+    int a = (int)std::floor(idx), b = (int)std::ceil(idx);
+    double f = idx - a;
+    double rho_q = rho_edges[a] * (1.0 - f) + rho_edges[b] * f;
+
+    // (2) effective alpha via Bonferroni over the RELEVANT test count
+    //   sen: correcting over the true edges being tested
+    //   spe: allowed false-positive budget (1 - measure_value) over non-edges
+    double alpha_eff;
+    if (sen)
+        alpha_eff = alpha / std::max(1, n_edges);
+    else
+        alpha_eff = (1.0 - measure_value) / std::max(1, n_nonedges);
+
+    // guard: keep alpha_eff in a sane open interval
+    alpha_eff = std::min(std::max(alpha_eff, 1e-8), 0.5);
+
+    // (3) analytic n for that (rho, alpha, power)
+    arma::uword n_anchor = warm_start_n(rho_q, (arma::uword)p, alpha_eff, power);
+
+    // (4) centered, clamped bracket; width floor -> fall back to full range
+    int lo = std::max(range_lower, (int)(n_anchor / c));
+    int hi = std::min(max_n,       (int)(n_anchor * c));
+    if (hi <= lo || hi < lo * 3) { lo = range_lower; hi = max_n; }
+    return { lo, hi };
+}
+
 // This is the version with the point accumulating strategy, which is more efficient and robust.
 // Each refined grid only evaluates n values not already present, and the probit
 // is fitted to the whole accumulated set. Saturated points (power 0 or 1) are
@@ -1503,7 +1577,8 @@ Rcpp::List cpp_bsda_probit(
         int               tol            = 2,
         double            tol_frac       = 0.01, // relative convergence: |n* - prev| / n* < tol_frac
         int               max_iter       = 10,
-        bool              verbose        = true) {
+        bool              verbose        = true,
+        Rcpp::Nullable<int> seed         = R_NilValue) {
 
     Rcpp::RNGScope scope;
     arma::wall_clock timer;
@@ -1517,6 +1592,11 @@ Rcpp::List cpp_bsda_probit(
     int burn_scout = (int)std::round(fit_burnin     * scout_frac);
     if (iter_scout < 1) iter_scout = 1;
     if (burn_scout < 1) burn_scout = 1;
+
+    // analytic warm-start interval for the scout grid
+    auto wi = bsda_warm_interval(K, G, p, measure, measure_value,
+                                range_lower, max_n, alpha, target_pow);
+    int rl = wi.first, mx = wi.second;
 
     // Persistent store of every point evaluated, across scout and all main
     // passes. Kept sorted implicitly by re-sorting before each fit.
@@ -1544,16 +1624,20 @@ Rcpp::List cpp_bsda_probit(
     // Step 1: explore coarse grid -- seed the store with these (they pin the tails the
     // narrow refined grids can never reach). Lower precision (H_scout), so
     // their standard error is larger and the fit downweights them accordingly.
-    arma::ivec scout_grid = bsda_log_grid(range_lower, max_n, n_scout);
+    arma::ivec scout_grid = bsda_log_grid(rl, mx, n_scout);
+    // pin the input-range extremes so a mis-anchored window can't hide a
+    // crossing that lies outside [rl, mx] but inside [range_lower, max_n].
+    arma::ivec ext = { range_lower, max_n };
+    scout_grid = arma::unique(arma::join_cols(scout_grid, ext));  // unique() sorts
     if (verbose) Rcpp::Rcout << "[scout] " << scout_grid.n_elem << " pts, H=" << H_scout
                              << " iters=" << iter_scout << "\n";
     GridEval scout = bsda_eval_grid(scout_grid, K, G, pip, p, nu, H_scout, J, gwish_sampler,
                                     gwish_tol, gwish_iter, gwish_burnin, thr, measure, measure_value,
-                                    init, iter_scout, burn_scout, alpha, "scout", verbose);
+                                    init, iter_scout, burn_scout, alpha, "scout", verbose, seed);
     append_to_store(scout);
 
     // initial range comes from the scout
-    arma::ivec cur_grid = bsda_refine_grid(scout, range_lower, max_n, n_main, eps);
+    arma::ivec cur_grid = bsda_refine_grid(scout, rl, mx, n_main, eps);
 
     // Steps 2-4 loop until |n* change| <= tolerance (or max_iter)
     double  n_star_prev = arma::datum::inf;
@@ -1576,7 +1660,7 @@ Rcpp::List cpp_bsda_probit(
             arma::ivec fresh_grid = arma::conv_to<arma::ivec>::from(fresh);
             GridEval ev = bsda_eval_grid(fresh_grid, K, G, pip, p, nu, H, J, gwish_sampler,
                                 gwish_tol, gwish_iter, gwish_burnin, thr, measure, measure_value,
-                                init, fit_iterations, fit_burnin, alpha, "main", verbose);
+                                init, fit_iterations, fit_burnin, alpha, "main", verbose, seed);
             append_to_store(ev);
         }
 
@@ -1631,17 +1715,36 @@ Rcpp::List cpp_bsda_probit(
         }
         n_star_prev = fit.n_star;
 
-        // Step 2 (re-refine): narrow the grid around the current CI.
+        // Step 2 (re-refine): narrow the grid around the current n_star
         // If every point of the new grid is already in the store, the next
         // pass evaluates nothing, the fit is unchanged, and the loop converges
         // on the following iteration (|n* change| == 0).
-        if (fit.n_nonsat >= 3 && std::isfinite(fit.ci_lo) && std::isfinite(fit.ci_hi)) {
-            int lo = std::max(range_lower, (int)std::floor(fit.ci_lo * 0.9));
-            int hi = std::min(max_n,       (int)std::ceil (fit.ci_hi * 1.1));
-            cur_grid = bsda_log_grid(lo, hi, n_main);
-            if ((int)cur_grid.n_elem < 3) break;   // window collapsed --> stop, report last fit
+        if (fit.n_nonsat >= 3 && std::isfinite(fit.n_star)) {
+            // sequential: one point at n*, one bisecting the bracketing gap toward it.
+            // The accumulated store already pins the shoulders, so new points only
+            // need to concentrate at the crossing where they shrink Var(n*).
+            int c1 = std::min(std::max((int)std::llround(fit.n_star), rl), mx);
+
+            // bracket n* in the sorted non-saturated set, bisect (log) the side it sits on
+            int c2 = -1;
+            {
+                arma::vec ns = arma::conv_to<arma::vec>::from(all_n(keep)); // ascending
+                for (arma::uword i = 0; i + 1 < ns.n_elem; ++i)
+                    if (ns(i) <= fit.n_star && fit.n_star <= ns(i+1)) {
+                        c2 = (int)std::llround(std::exp(0.5*(std::log(ns(i)) + std::log(ns(i+1)))));
+                        break;
+                    }
+                if (c2 > 0) c2 = std::min(std::max(c2, rl), mx);
+            }
+
+            std::vector<int> cand;
+            if (!already_have(c1))                       cand.push_back(c1);
+            if (c2 > 0 && c2 != c1 && !already_have(c2)) cand.push_back(c2);
+
+            if (cand.empty()) { converged = true; break; }  // n* bracketed to integer res.
+            cur_grid = arma::conv_to<arma::ivec>::from(cand);
         } else {
-            break;   // fit not identified --> stop, report last fit (converged stays FALSE)
+            break;
         }
     }
 

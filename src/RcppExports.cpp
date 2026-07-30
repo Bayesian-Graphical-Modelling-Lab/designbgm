@@ -152,8 +152,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_bsda_probit
-Rcpp::List cpp_bsda_probit(const arma::mat& K, const arma::mat& G, const arma::mat& pip, int p, int nu, std::string measure, double measure_value, double target_pow, int range_lower, int max_n, int n_scout, int n_main, int H, int H_scout, int J, double scout_frac, std::string gwish_sampler, double gwish_tol, arma::uword gwish_iter, arma::uword gwish_burnin, double edge_selection_threshold, std::string init, int fit_iterations, int fit_burnin, double alpha, int n_boot, double eps, int tol, double tol_frac, int max_iter, bool verbose);
-RcppExport SEXP _designbgm_cpp_bsda_probit(SEXP KSEXP, SEXP GSEXP, SEXP pipSEXP, SEXP pSEXP, SEXP nuSEXP, SEXP measureSEXP, SEXP measure_valueSEXP, SEXP target_powSEXP, SEXP range_lowerSEXP, SEXP max_nSEXP, SEXP n_scoutSEXP, SEXP n_mainSEXP, SEXP HSEXP, SEXP H_scoutSEXP, SEXP JSEXP, SEXP scout_fracSEXP, SEXP gwish_samplerSEXP, SEXP gwish_tolSEXP, SEXP gwish_iterSEXP, SEXP gwish_burninSEXP, SEXP edge_selection_thresholdSEXP, SEXP initSEXP, SEXP fit_iterationsSEXP, SEXP fit_burninSEXP, SEXP alphaSEXP, SEXP n_bootSEXP, SEXP epsSEXP, SEXP tolSEXP, SEXP tol_fracSEXP, SEXP max_iterSEXP, SEXP verboseSEXP) {
+Rcpp::List cpp_bsda_probit(const arma::mat& K, const arma::mat& G, const arma::mat& pip, int p, int nu, std::string measure, double measure_value, double target_pow, int range_lower, int max_n, int n_scout, int n_main, int H, int H_scout, int J, double scout_frac, std::string gwish_sampler, double gwish_tol, arma::uword gwish_iter, arma::uword gwish_burnin, double edge_selection_threshold, std::string init, int fit_iterations, int fit_burnin, double alpha, int n_boot, double eps, int tol, double tol_frac, int max_iter, bool verbose, Rcpp::Nullable<int> seed);
+RcppExport SEXP _designbgm_cpp_bsda_probit(SEXP KSEXP, SEXP GSEXP, SEXP pipSEXP, SEXP pSEXP, SEXP nuSEXP, SEXP measureSEXP, SEXP measure_valueSEXP, SEXP target_powSEXP, SEXP range_lowerSEXP, SEXP max_nSEXP, SEXP n_scoutSEXP, SEXP n_mainSEXP, SEXP HSEXP, SEXP H_scoutSEXP, SEXP JSEXP, SEXP scout_fracSEXP, SEXP gwish_samplerSEXP, SEXP gwish_tolSEXP, SEXP gwish_iterSEXP, SEXP gwish_burninSEXP, SEXP edge_selection_thresholdSEXP, SEXP initSEXP, SEXP fit_iterationsSEXP, SEXP fit_burninSEXP, SEXP alphaSEXP, SEXP n_bootSEXP, SEXP epsSEXP, SEXP tolSEXP, SEXP tol_fracSEXP, SEXP max_iterSEXP, SEXP verboseSEXP, SEXP seedSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -188,7 +188,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type tol_frac(tol_fracSEXP);
     Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_bsda_probit(K, G, pip, p, nu, measure, measure_value, target_pow, range_lower, max_n, n_scout, n_main, H, H_scout, J, scout_frac, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, edge_selection_threshold, init, fit_iterations, fit_burnin, alpha, n_boot, eps, tol, tol_frac, max_iter, verbose));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<int> >::type seed(seedSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_bsda_probit(K, G, pip, p, nu, measure, measure_value, target_pow, range_lower, max_n, n_scout, n_main, H, H_scout, J, scout_frac, gwish_sampler, gwish_tol, gwish_iter, gwish_burnin, edge_selection_threshold, init, fit_iterations, fit_burnin, alpha, n_boot, eps, tol, tol_frac, max_iter, verbose, seed));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -262,7 +263,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_designbgm_cpp_n_vec", (DL_FUNC) &_designbgm_cpp_n_vec, 2},
     {"_designbgm_cpp_design_bfda_edge_sparse", (DL_FUNC) &_designbgm_cpp_design_bfda_edge_sparse, 22},
     {"_designbgm_power_at_n", (DL_FUNC) &_designbgm_power_at_n, 20},
-    {"_designbgm_cpp_bsda_probit", (DL_FUNC) &_designbgm_cpp_bsda_probit, 31},
+    {"_designbgm_cpp_bsda_probit", (DL_FUNC) &_designbgm_cpp_bsda_probit, 32},
     {"_designbgm_cpp_ggm_prior_ess_vr_pr", (DL_FUNC) &_designbgm_cpp_ggm_prior_ess_vr_pr, 13},
     {"_designbgm_cpp_precision_to_partial_correlations", (DL_FUNC) &_designbgm_cpp_precision_to_partial_correlations, 1},
     {"_designbgm_cpp_simulate_ggm_study_precision", (DL_FUNC) &_designbgm_cpp_simulate_ggm_study_precision, 4},

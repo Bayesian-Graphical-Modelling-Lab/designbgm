@@ -451,7 +451,8 @@ bsda_control <- function(gwish_sampler  = "direct",
                          n_boot         = 5000L,
                          eps            = 1e-3,
                          tol_frac       = 0.01,
-                         verbose        = FALSE) {
+                         verbose        = FALSE,
+                         seed           = NULL) {
   gwish_sampler <- match.arg(gwish_sampler, c("direct", "block"))
   stopifnot(gwish_iter >= 1, fit_iterations >= 1, fit_burnin >= 0,
           alpha > 0, alpha < 1, n_boot >= 1,
@@ -711,7 +712,8 @@ design.ggm_elicited <- function(params,
           tol                       = n_tol,
           tol_frac                  = control$tol_frac,
           max_iter                  = control$max_iter,
-          verbose                   = control$verbose
+          verbose                   = control$verbose,
+          seed                      = control$seed
         )
     }
   )
@@ -903,7 +905,7 @@ summary.ggm_design <- function(object, ...) {
 
 #' @noRd
 .design_eval_bsda_ggm <- function(ep, n_eval, H, J, measure, measure_value,
-                                  control, seed = NULL) {
+                                  control) {
   power_at_n(
     K = ep$scale, 
     G = ep$G, 
@@ -924,7 +926,7 @@ summary.ggm_design <- function(object, ...) {
     fit_iterations           = control$fit_iterations,
     fit_burnin               = control$fit_burnin,
     alpha                    = control$alpha,
-    seed                     = seed
+    seed                     = control$seed
   )
 }
 
@@ -1043,10 +1045,10 @@ validate.ggm_design <- function(plan, H = 500L, J = 100L,
     ctrl <- info$control %||% bsda_control() # default control if not stored in the plan
 
     res <- .design_eval_bsda_ggm(
-      ep = ep, n_star = n_star, H = H, J = J,
+      ep = ep, n_eval = n_star, H = H, J = J,
       measure       = info$measure,
       measure_value = info$measure_value,         
-      control       = ctrl, seed = seed)
+      control       = ctrl)
 
     return(new_bgm_design_validation(
       family = "ggm", method = "BSDA", scope = NULL, prior = plan$prior,
