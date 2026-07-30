@@ -35,3 +35,4 @@ R/designbgm-notation.R
 *.log
 # /.quarto/
 # **/*.quarto_ipynb
+docs
