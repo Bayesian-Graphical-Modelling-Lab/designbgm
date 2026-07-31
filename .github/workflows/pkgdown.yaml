@@ -20,6 +20,7 @@ jobs:
       group: pkgdown-${{ github.event_name != 'pull_request' || github.run_id }}
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      PKG_USE_BIOCONDUCTOR: false
     permissions:
       contents: write
     steps:
@@ -31,6 +32,7 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
+          pak-version: devel
           extra-packages: any::pkgdown, local::.
           needs: website
 
