@@ -117,7 +117,10 @@ design(
   [`bsda_control`](https://bayesian-graphical-modelling-lab.github.io/designbgm/reference/bsda_control.md).
   Default
   [`bsda_control()`](https://bayesian-graphical-modelling-lab.github.io/designbgm/reference/bsda_control.md).
-  \#' @param ... Ignored, present for consistency with the generic
+
+- ...:
+
+  Ignored, present for consistency with the generic
   [`design()`](https://bayesian-graphical-modelling-lab.github.io/designbgm/reference/design.md).
 
 ## Value

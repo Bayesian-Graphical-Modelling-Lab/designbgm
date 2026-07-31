@@ -84,6 +84,10 @@ bsda_control(
 
   Stream progress from the C++ routine. Default `FALSE`.
 
+- seed:
+
+  Random seed for reproducibility. Default `NULL` (no seed).
+
 ## Value
 
 A named list of control settings.

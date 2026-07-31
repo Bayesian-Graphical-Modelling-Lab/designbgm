@@ -13,7 +13,7 @@ supported.
 
 Useful links:
 
-- <https://github.com/Bayesian-Graphical-Modelling-Lab/designbgm>
+- <https://bayesian-graphical-modelling-lab.github.io/designbgm/>
 
 - Report bugs at
   <https://github.com/Bayesian-Graphical-Modelling-Lab/designbgm/issues>
