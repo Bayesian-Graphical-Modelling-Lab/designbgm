@@ -53,6 +53,8 @@ used to stop the search. Default 0.01, matched to typical H = 50.
 Lower it if H raises substantially.}
 
 \item{verbose}{Stream progress from the C++ routine. Default \code{FALSE}.}
+
+\item{seed}{Random seed for reproducibility. Default \code{NULL} (no seed).}
 }
 \value{
 A named list of control settings.

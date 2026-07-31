@@ -433,6 +433,7 @@ prior_ess.ggm_elicited <- function(params,
 #'   used to stop the search. Default 0.01, matched to typical H = 50. 
 #'   Lower it if H raises substantially.
 #' @param verbose Stream progress from the C++ routine. Default \code{FALSE}.
+#' @param seed Random seed for reproducibility. Default \code{NULL} (no seed).
 #' @return A named list of control settings.
 #' @family sample size planning
 #' @export
@@ -507,7 +508,7 @@ bsda_control <- function(gwish_sampler  = "direct",
 #' @param range_lower BSDA only: the lower bound of the sample size search range. Default 2.
 #' @param control BSDA only: a list of control parameters, as returned by
 #'   \code{\link{bsda_control}}. Default \code{bsda_control()}.
-#' #' @param ... Ignored, present for consistency with the generic \code{design()}.
+#' @param ... Ignored, present for consistency with the generic \code{design()}.
 #' @return A \code{ggm_design} object, which also inherits from
 #'   \code{bgm_design}. Its \code{results} component contains the recommended
 #'   sizes: \code{n_star_global} and \code{n_star_pw} for \code{"DPIR"};
@@ -1037,6 +1038,8 @@ validate.ggm_design <- function(plan, H = 500L, J = 100L,
       call_info = list(H = H, J = J, threshold = thr, pow0 = pow0, pow1 = pow1,
                       which_n = which_n))
   } else {  # BSDA
+    if (!is.null(which_n))
+      stop("BSDA plans have a single n*; 'which_n' does not apply.", call. = FALSE)
     n_star <- r$n_star
     if (is.null(n_star) || !is.finite(n_star) || !isTRUE(r$identified))
       stop("Plan has no identified n* to validate.", call. = FALSE)

@@ -77,8 +77,9 @@ power to achieve it. Defaults are \code{"sen"}, 0.8, and 0.8.}
 \item{range_lower}{BSDA only: the lower bound of the sample size search range. Default 2.}
 
 \item{control}{BSDA only: a list of control parameters, as returned by
-  \code{\link{bsda_control}}. Default \code{bsda_control()}.
-#' @param ... Ignored, present for consistency with the generic \code{design()}.}
+\code{\link{bsda_control}}. Default \code{bsda_control()}.}
+
+\item{...}{Ignored, present for consistency with the generic \code{design()}.}
 }
 \value{
 A \code{ggm_design} object, which also inherits from

@@ -11,7 +11,7 @@ Plans sample sizes of a prospective study for a Bayesian graphical model, given 
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/Bayesian-Graphical-Modelling-Lab/designbgm}
+  \item \url{https://bayesian-graphical-modelling-lab.github.io/designbgm/}
   \item Report bugs at \url{https://github.com/Bayesian-Graphical-Modelling-Lab/designbgm/issues}
 }
 

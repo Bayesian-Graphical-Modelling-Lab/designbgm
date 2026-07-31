@@ -1531,11 +1531,12 @@ static std::pair<int,int> bsda_warm_interval(
 
     // (3) analytic n for that (rho, alpha, power)
     arma::uword n_anchor = warm_start_n(rho_q, (arma::uword)p, alpha_eff, power);
-
+    if (n_anchor > (arma::uword)max_n) n_anchor = (arma::uword)max_n;   // <- add
     // (4) centered, clamped bracket; width floor -> fall back to full range
-    int lo = std::max(range_lower, (int)(n_anchor / c));
-    int hi = std::min(max_n,       (int)(n_anchor * c));
+    int lo = std::max(range_lower, (int)((double)n_anchor / c));
+    int hi = std::min(max_n,       (int)((double)n_anchor * c));
     if (hi <= lo || hi < lo * 3) { lo = range_lower; hi = max_n; }
+
     return { lo, hi };
 }
 
