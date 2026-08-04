@@ -1166,6 +1166,12 @@ Rcpp::List power_at_n(
         Rcpp::Nullable<int> seed         = R_NilValue) // set the same seed at every n for common random numbers
 {
     Rcpp::RNGScope scope;
+    if (n < 2 || n > 1000000) {                 // reject before ANY allocation
+        return Rcpp::List::create(
+            Rcpp::Named("power")     = NA_REAL,
+            Rcpp::Named("halfwidth") = NA_REAL,
+            Rcpp::Named("measure")   = NA_REAL);
+    }
 
     // common random numbers: identical seed -> identical K_h sequence across n,
     // which cancels the between-draw variance from differences along the curve.
@@ -1397,6 +1403,7 @@ static ProbitResult bsda_probit_invert(const arma::ivec& n,
                                         const arma::vec& se,
                                         const std::string& measure, 
                                         double target_pow, double eps, 
+                                        int max_n,
                                         int n_boot){
     ProbitResult R0;
     const int m = (int)n.n_elem;
@@ -1441,7 +1448,19 @@ static ProbitResult bsda_probit_invert(const arma::ivec& n,
     R0.direction = obs_inc ? "lower_crossing" : "upper_bound";
 
     const double zt = R::qnorm(target_pow, 0.0, 1.0, 1, 0);
-    R0.n_star = (std::abs(R0.b) < 1e-8) ? NA_REAL : std::exp((zt - R0.a) / R0.b);
+    if (std::abs(R0.b) < 1e-8) {
+        R0.n_star = NA_REAL;                          // flat slope -> undefined crossing
+    } else {
+        double n_star_raw = std::exp((zt - R0.a) / R0.b);
+        // out of feasible range in EITHER direction -> NA (R relabels the case):
+        //   underflow  (raw < 2)      -> crossing below floor  -> target_met_below_range
+        //   overflow   (raw > max_n)  -> crossing above ceiling -> target_unmet_within_range
+        if (!std::isfinite(n_star_raw) || n_star_raw < 2.0 || n_star_raw > (double)max_n) {
+            R0.n_star = NA_REAL;
+        } else {
+            R0.n_star = n_star_raw;
+        }
+    }
 
     // vectorized parametric bootstrap (no std::vector / push_back)
     arma::mat Lc = arma::chol(Vb);                       // Vb = Lc' Lc
@@ -1470,7 +1489,7 @@ static ProbitResult bsda_probit_invert(const arma::ivec& n,
 // Returns {lo, hi}: an anchored, clamped sample-size bracket for the scout.
 //
 //  (1) pick the true-edge partial correlation rho_q set by (measure, measure_value)
-//  (2) Bonferroni-style effective alpha from the relevant test count
+//  (2) Bonferroni-style effective alpha from the relevant test count (overconservative, but still safe)
 //  (3) warm_start_n(rho_q, alpha_eff, power) -> anchor n
 //  (4) [anchor/c, anchor*c], clamped to the user range
 static std::pair<int,int> bsda_warm_interval(
@@ -1694,7 +1713,7 @@ Rcpp::List cpp_bsda_probit(
         // the probit link is undefined at the boundaries.
         arma::uvec keep = arma::find(all_pow > 0.0 && all_pow < 1.0);
         fit = bsda_probit_invert(all_n(keep), all_pow(keep), all_se(keep), measure,
-                                 target_pow, eps, n_boot);
+                                 target_pow, eps, max_n, n_boot);
 
         if (verbose) Rcpp::Rcout << "a=" << fit.a << " b=" << fit.b << " [" << fit.slope
                                  << " -> " << fit.direction << "] n_nonsat=" << fit.n_nonsat
